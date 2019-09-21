@@ -1,5 +1,7 @@
 #include "cameracontrol.h"
 #include "bcm_host.h"
+#include <QDebug>
+#include <QString>
 
 
 #define zoom_full_16P16 (uint(65536 * 0.15))
@@ -24,52 +26,52 @@ CameraControl::mmal_status_to_int(MMAL_STATUS_T status) {
    else {
       switch (status) {
           case MMAL_ENOMEM :
-             vcos_log_error("Out of memory");
+             qDebug() << QString("Out of memory");
              break;
           case MMAL_ENOSPC :
-             vcos_log_error("Out of resources (other than memory)");
+             qDebug() << QString("Out of resources (other than memory)");
              break;
           case MMAL_EINVAL:
-             vcos_log_error("Argument is invalid");
+             qDebug() << QString("Argument is invalid");
              break;
           case MMAL_ENOSYS :
-             vcos_log_error("Function not implemented");
+             qDebug() << QString("Function not implemented");
              break;
           case MMAL_ENOENT :
-             vcos_log_error("No such file or directory");
+             qDebug() << QString("No such file or directory");
              break;
           case MMAL_ENXIO :
-             vcos_log_error("No such device or address");
+             qDebug() << QString("No such device or address");
              break;
           case MMAL_EIO :
-             vcos_log_error("I/O error");
+             qDebug() << QString("I/O error");
              break;
           case MMAL_ESPIPE :
-             vcos_log_error("Illegal seek");
+             qDebug() << QString("Illegal seek");
              break;
           case MMAL_ECORRUPT :
-             vcos_log_error("Data is corrupt \attention FIXME: not POSIX");
+             qDebug() << QString("Data is corrupt \attention FIXME: not POSIX");
              break;
           case MMAL_ENOTREADY :
-             vcos_log_error("Component is not ready \attention FIXME: not POSIX");
+             qDebug() << QString("Component is not ready \attention FIXME: not POSIX");
              break;
           case MMAL_ECONFIG :
-             vcos_log_error("Component is not configured \attention FIXME: not POSIX");
+             qDebug() << QString("Component is not configured \attention FIXME: not POSIX");
              break;
           case MMAL_EISCONN :
-             vcos_log_error("Port is already connected ");
+             qDebug() << QString("Port is already connected ");
              break;
           case MMAL_ENOTCONN :
-             vcos_log_error("Port is disconnected");
+             qDebug() << QString("Port is disconnected");
              break;
           case MMAL_EAGAIN :
-             vcos_log_error("Resource temporarily unavailable. Try again later");
+             qDebug() << QString("Resource temporarily unavailable. Try again later");
              break;
           case MMAL_EFAULT :
-             vcos_log_error("Bad address");
+             qDebug() << QString("Bad address");
              break;
           default :
-             vcos_log_error("Unknown status error");
+             qDebug() << QString("Unknown status error");
              break;
       }
       return 1;
@@ -122,13 +124,15 @@ CameraControl::checkConfiguration(int min_gpu_mem) {
     int supported = 0, detected = 0;
     get_camera(&supported, &detected);
     if (!supported)
-        vcos_log_error("Camera is not enabled in this build. Try running \"sudo raspi-config\" and ensure that \"camera\" has been enabled\n");
+        qDebug() << QString("Camera is not enabled in this build. Try running \"sudo raspi-config\" and ensure that \"camera\" has been enabled\n");
     else if (gpu_mem < min_gpu_mem)
-        vcos_log_error("Only %dM of gpu_mem is configured. Try running \"sudo raspi-config\" and ensure that \"memory_split\" has a value of %d or greater\n", gpu_mem, min_gpu_mem);
+        qDebug() << QString("Only %1M of gpu_mem is configured. Try running \"sudo raspi-config\" and ensure that \"memory_split\" has a value of %2 or greater\n")
+                    .arg(gpu_mem)
+                    .arg(min_gpu_mem);
     else if (!detected)
-        vcos_log_error("Camera is not detected. Please check carefully the camera module is installed correctly\n");
+        qDebug() << QString("Camera is not detected. Please check carefully the camera module is installed correctly\n");
     else
-        vcos_log_error("Failed to run camera app. Please check for firmware updates\n");
+        qDebug() << QString("Failed to run camera app. Please check for firmware updates\n");
 }
 
 
@@ -190,7 +194,7 @@ CameraControl::set_saturation(MMAL_COMPONENT_T *camera, int saturation) {
         ret = mmal_status_to_int(mmal_port_parameter_set_rational(camera->control, MMAL_PARAMETER_SATURATION, value));
     }
     else {
-        vcos_log_error("Invalid saturation value");
+        qDebug() << QString("Invalid saturation value");
         ret = 1;
     }
     return ret;
@@ -212,7 +216,7 @@ CameraControl::set_sharpness(MMAL_COMPONENT_T *camera, int sharpness) {
         ret = mmal_status_to_int(mmal_port_parameter_set_rational(camera->control, MMAL_PARAMETER_SHARPNESS, value));
     }
     else {
-        vcos_log_error("Invalid sharpness value");
+        qDebug() << QString("Invalid sharpness value");
         ret = 1;
     }
 
@@ -236,7 +240,7 @@ CameraControl::set_contrast(MMAL_COMPONENT_T *camera, int contrast) {
         ret = mmal_status_to_int(mmal_port_parameter_set_rational(camera->control, MMAL_PARAMETER_CONTRAST, value));
     }
     else {
-        vcos_log_error("Invalid contrast value");
+        qDebug() << QString("Invalid contrast value");
         ret = 1;
     }
     return ret;
@@ -259,7 +263,7 @@ CameraControl::set_brightness(MMAL_COMPONENT_T *camera, int brightness) {
         ret = mmal_status_to_int(mmal_port_parameter_set_rational(camera->control, MMAL_PARAMETER_BRIGHTNESS, value));
     }
     else {
-        vcos_log_error("Invalid brightness value");
+        qDebug() << QString("Invalid brightness value");
         ret = 1;
     }
 
@@ -700,7 +704,7 @@ CameraControl::zoom_in_zoom_out(MMAL_COMPONENT_T *camera, ZOOM_COMMAND_T zoom_co
     crop.hdr.id = MMAL_PARAMETER_INPUT_CROP;
     crop.hdr.size = sizeof(crop);
     if(mmal_port_parameter_get(camera->control, &crop.hdr) != MMAL_SUCCESS) {
-        vcos_log_error("mmal_port_parameter_get(camera->control, &crop.hdr) failed, skip it");
+        qDebug() << QString("mmal_port_parameter_get(camera->control, &crop.hdr) failed, skip it");
         return 0;
     }
 
@@ -742,7 +746,9 @@ CameraControl::zoom_in_zoom_out(MMAL_COMPONENT_T *camera, ZOOM_COMMAND_T zoom_co
         roi->w = roi->h = double(crop.rect.width)/65536.0;
     }
     else {
-        vcos_log_error("Failed to set crop values, x/y: %u, w/h: %u", crop.rect.x, crop.rect.width);
+        qDebug() << QString("Failed to set crop values, x/y: %1, w/h: %2")
+                    .arg(crop.rect.x)
+                    .arg(crop.rect.width);
         ret = 1;
     }
     return ret;

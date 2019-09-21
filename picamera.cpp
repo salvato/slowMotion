@@ -24,22 +24,27 @@ default_camera_control_callback(MMAL_PORT_T *port, MMAL_BUFFER_HEADER_T *buffer)
         switch (param->hdr.id) {
             case MMAL_PARAMETER_CAMERA_SETTINGS: {
                 MMAL_PARAMETER_CAMERA_SETTINGS_T *settings = reinterpret_cast<MMAL_PARAMETER_CAMERA_SETTINGS_T*>(param);
-                vcos_log_error("Exposure now %u, analog gain %u/%u, digital gain %u/%u",
-                               settings->exposure,
-                               settings->analog_gain.num, settings->analog_gain.den,
-                               settings->digital_gain.num, settings->digital_gain.den);
-                vcos_log_error("AWB R=%u/%u, B=%u/%u",
-                               settings->awb_red_gain.num, settings->awb_red_gain.den,
-                               settings->awb_blue_gain.num, settings->awb_blue_gain.den);
+                qDebug() << QString("Exposure now %1, analog gain %2/%3, digital gain %4/%5")
+                               .arg(settings->exposure)
+                               .arg(settings->analog_gain.num)
+                               .arg(settings->analog_gain.den)
+                               .arg(settings->digital_gain.num)
+                               .arg(settings->digital_gain.den);
+                qDebug() << QString("AWB R=%1/%2, B=%3/%4")
+                               .arg(settings->awb_red_gain.num)
+                               .arg(settings->awb_red_gain.den)
+                               .arg(settings->awb_blue_gain.num)
+                               .arg(settings->awb_blue_gain.den);
             }
             break;
         }
     }
     else if(buffer->cmd == MMAL_EVENT_ERROR) {
-        vcos_log_error("No data received from sensor. Check all connections, including the Sunny one on the camera board");
+        qDebug() << QString("No data received from sensor. Check all connections, including the Sunny one on the camera board");
     }
     else {
-        vcos_log_error("Received unexpected camera control callback event, 0x%08x", buffer->cmd);
+        qDebug() << QString("Received unexpected camera control callback event, 0x%1x")
+                    .arg(uint(buffer->cmd), 8, 16, QLatin1Char('0'));
     }
     mmal_buffer_header_release(buffer);
 }
@@ -59,7 +64,7 @@ PiCamera::createComponent(int cameraNum, int sensorMode) {
     // Create the component
     status = mmal_component_create(MMAL_COMPONENT_DEFAULT_CAMERA, &cameraComponent);
     if(status != MMAL_SUCCESS) {
-        vcos_log_error("Failed to create camera component");
+        qDebug() << QString("Failed to create camera component");
         if(cameraComponent)
             mmal_component_destroy(cameraComponent);
         return status;
@@ -70,14 +75,14 @@ PiCamera::createComponent(int cameraNum, int sensorMode) {
                                         };
     status = mmal_port_parameter_set(cameraComponent->control, &camera_num.hdr);
     if(status != MMAL_SUCCESS) {
-        vcos_log_error("Could not select camera : error %d", status);
+        qDebug() << QString("Could not select camera : error %1").arg(status);
         if(cameraComponent)
             mmal_component_destroy(cameraComponent);
         return status;
     }
     if(!cameraComponent->output_num) {
         status = MMAL_ENOSYS;
-        vcos_log_error("Camera doesn't have output ports");
+        qDebug() << QString("Camera doesn't have output ports");
         if(cameraComponent)
             mmal_component_destroy(cameraComponent);
         return status;
@@ -86,7 +91,7 @@ PiCamera::createComponent(int cameraNum, int sensorMode) {
                                             MMAL_PARAMETER_CAMERA_CUSTOM_SENSOR_CONFIG,
                                             uint32_t(sensorMode));
     if(status != MMAL_SUCCESS) {
-        vcos_log_error("Could not set sensor mode : error %d", status);
+        qDebug() << QString("Could not set sensor mode : error %1").arg(status);
         if(cameraComponent)
             mmal_component_destroy(cameraComponent);
     }
@@ -125,7 +130,7 @@ PiCamera::setCallback() {
     // Enable the camera, and tell it its control callback function
     status = mmal_port_enable(cameraComponent->control, default_camera_control_callback);
     if(status != MMAL_SUCCESS ){
-        vcos_log_error("Unable to enable control port : error %d", status);
+        qDebug() << QString("Unable to enable control port : error %1").arg(status);
         mmal_component_destroy(cameraComponent);
     }
     return status;
@@ -185,7 +190,7 @@ PiCamera::setAllParameters() {
         };
         MMAL_STATUS_T status = mmal_port_parameter_set(cameraComponent->control, &change_event_request.hdr);
         if(status != MMAL_SUCCESS) {
-            vcos_log_error("No camera settings events");
+            qDebug() << QString("No camera settings events");
         }
         result += status;
     }
@@ -241,7 +246,7 @@ PiCamera::setPortFormats(const RASPICAM_CAMERA_PARAMETERS *camera_parameters,
     }
     status = mmal_port_format_commit(previewPort);
     if(status != MMAL_SUCCESS ) {
-        vcos_log_error("camera viewfinder format couldn't be set");
+        qDebug() << QString("camera viewfinder format couldn't be set");
         mmal_component_destroy(cameraComponent);
         return status;
     }
@@ -250,7 +255,7 @@ PiCamera::setPortFormats(const RASPICAM_CAMERA_PARAMETERS *camera_parameters,
     mmal_format_full_copy(videoPort->format, format);
     status = mmal_port_format_commit(videoPort);
     if(status != MMAL_SUCCESS ) {
-        vcos_log_error("camera video format couldn't be set");
+        qDebug() << QString("camera video format couldn't be set");
         mmal_component_destroy(cameraComponent);
         return status;
     }
@@ -301,13 +306,13 @@ PiCamera::setPortFormats(const RASPICAM_CAMERA_PARAMETERS *camera_parameters,
     stillPort->buffer_num = stillPort->buffer_num_recommended;
     status = mmal_port_parameter_set_boolean(videoPort, MMAL_PARAMETER_ZERO_COPY, MMAL_TRUE);
     if(status != MMAL_SUCCESS) {
-        vcos_log_error("Failed to select zero copy");
+        qDebug() << QString("Failed to select zero copy");
         mmal_component_destroy(cameraComponent);
         return status;
     }
     status = mmal_port_format_commit(stillPort);
     if(status != MMAL_SUCCESS ) {
-        vcos_log_error("camera still format couldn't be set");
+        qDebug() << QString("camera still format couldn't be set");
         mmal_component_destroy(cameraComponent);
         return status;
     }
@@ -321,7 +326,7 @@ PiCamera::enableCamera() {
     // Enable component
     MMAL_STATUS_T status = mmal_component_enable(cameraComponent);
     if(status != MMAL_SUCCESS ) {
-        vcos_log_error("camera component couldn't be enabled");
+        qDebug() << QString("camera component couldn't be enabled");
         mmal_component_destroy(cameraComponent);
     }
     return status;
@@ -335,7 +340,8 @@ PiCamera::createBufferPool() {
     MMAL_PORT_T *still_port = cameraComponent->output[MMAL_CAMERA_CAPTURE_PORT];
     pool = mmal_port_pool_create(still_port, still_port->buffer_num, still_port->buffer_size);
     if(!pool) {
-        vcos_log_error("Failed to create buffer header pool for camera still port %s", still_port->name);
+        qDebug() << QString("Failed to create buffer header pool for camera still port %1")
+                    .arg(still_port->name);
     }
     if(verbose)
         qDebug() << "Camera component done";
@@ -353,7 +359,7 @@ PiCamera::start(Preview *pPreview) {
     status = connectPorts(previewPort, preview_input_port, &previewConnection);
     if(status != MMAL_SUCCESS) {
         cameraControl.mmal_status_to_int(status);
-        vcos_log_error("%s: Failed to connect camera to preview", __func__);
+        qDebug() << QString("%1: Failed to connect camera to preview").arg(__func__);
         handleError(status, pPreview);
         return status;
     }

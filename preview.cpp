@@ -28,7 +28,7 @@ Preview::createComponent() {
         // No preview required, so create a null sink component to take its place
         status = mmal_component_create("vc.null_sink", &preview);
         if(status != MMAL_SUCCESS) {
-            vcos_log_error("Unable to create null sink component");
+            qDebug() << QString("Unable to create null sink component");
             if(preview)
                 mmal_component_destroy(preview);
             return status;
@@ -38,14 +38,14 @@ Preview::createComponent() {
         status = mmal_component_create(MMAL_COMPONENT_DEFAULT_VIDEO_RENDERER,
                                        &preview);
         if(status != MMAL_SUCCESS) {
-            vcos_log_error("Unable to create preview component");
+            qDebug() << QString("Unable to create preview component");
             if(preview)
                 mmal_component_destroy(preview);
             return status;
         }
         if(!preview->input_num) {
             status = MMAL_ENOSYS;
-            vcos_log_error("No input ports found on component");
+            qDebug() << QString("No input ports found on component");
             mmal_component_destroy(preview);
             return status;
         }
@@ -69,7 +69,7 @@ Preview::createComponent() {
         }
         status = mmal_port_parameter_set(preview_port, &param.hdr);
         if(status != MMAL_SUCCESS && status != MMAL_ENOSYS) {
-            vcos_log_error("unable to set preview port parameters (%u)", status);
+            qDebug() << QString("unable to set preview port parameters (%1)").arg(status);
             mmal_component_destroy(preview);
             return status;
         }
@@ -77,7 +77,7 @@ Preview::createComponent() {
     // Enable component
     status = mmal_component_enable(preview);
     if(status != MMAL_SUCCESS) {
-        vcos_log_error("Unable to enable preview/null sink component (%u)", status);
+        qDebug() << QString("Unable to enable preview/null sink component (%u)").arg(status);
         mmal_component_destroy(preview);
         return status;
     }

@@ -33,8 +33,6 @@ MainDialog::MainDialog(QWidget *parent)
     , gpioHostHandle(-1)
 {
     MMAL_STATUS_T status;
-    // Register our application with the logging system
-    vcos_log_register("slowMotion", VCOS_LOG_CATEGORY);
 
     pUi->setupUi(this);
     setFixedSize(size());
@@ -295,7 +293,7 @@ MainDialog::getSensorDefaults(int camera_num, char *camera_name, int *width, int
             camera_name[MMAL_PARAMETER_CAMERA_INFO_MAX_STR_LEN-1] = 0;
          }
          else
-            vcos_log_error("Cannot read camera info, keeping the defaults for OV5647");
+            qDebug() << QString("Cannot read camera info, keeping the defaults for OV5647");
       }
       else {
          // Older firmware
@@ -304,7 +302,7 @@ MainDialog::getSensorDefaults(int camera_num, char *camera_name, int *width, int
       mmal_component_destroy(camera_info);
    }
    else {
-      vcos_log_error("Failed to create camera_info component");
+      qDebug() << QString("Failed to create camera_info component");
    }
    // default to OV5647 if nothing detected..
    if (*width == 0)
@@ -425,10 +423,8 @@ void
 MainDialog::onTimeToGetNewImage() {
     switchLampOn();
     QThread::msleep(10);
-    int iErr = kill(pid, SIGUSR1);
-    if(iErr == -1) {
-        pUi->statusBar->setText(QString("Error %1 in sending SIGUSR1 signal"));
-    }
+
+// TODO:
     QThread::msleep(300);
     switchLampOff();
 }
