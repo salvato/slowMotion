@@ -1,18 +1,94 @@
-#include <QDebug>
+﻿#include <QDebug>
 #include "maindialog.h"
 #include "ui_maindialog.h"
-//#include "linux/gpio.h"
+#include "pigpiod_if2.h"// The library for using GPIO pins on Raspberry
+#include "setupdialog.h"
+#include <QThread>
+#include <QMoveEvent>
+#include <QMessageBox>
+#include <QStandardPaths>
+#include <QSettings>
+#include <QDebug>
+#include <QDir>
+
+
+#define MIN_INTERVAL 1500 // in ms (depends on the image format: jpeg is HW accelerated !)
+#define IMAGE_QUALITY 100 // 100 is Best quality
+
+
+// ================================================
+// GPIO Numbers are Broadcom (BCM) numbers
+// ================================================
+// +5V on pins 2 or 4 in the 40 pin GPIO connector.
+// GND on pins 6, 9, 14, 20, 25, 30, 34 or 39
+// in the 40 pin GPIO connector.
+// ================================================
+#define LED_PIN  23 // BCM23 is Pin 16 in the 40 pin GPIO connector.
 
 
 MainDialog::MainDialog(QWidget *parent)
     : QDialog(parent)
-    , ui(new Ui::MainDialog)
+    , pUi(new Ui::MainDialog)
+    , gpioLEDpin(LED_PIN)
+    , gpioHostHandle(-1)
 {
     MMAL_STATUS_T status;
     // Register our application with the logging system
     vcos_log_register("slowMotion", VCOS_LOG_CATEGORY);
 
-    ui->setupUi(this);
+    pUi->setupUi(this);
+    setFixedSize(size());
+
+    dialogPos = pos();
+    videoPos  = pUi->labelVideo->pos();
+    videoSize = pUi->labelVideo->size();
+
+    // Setup the QLineEdit styles
+    sNormalStyle = pUi->lampStatus->styleSheet();
+    sErrorStyle  = "QLineEdit { \
+                        color: rgb(255, 255, 255); \
+                        background: rgb(255, 0, 0); \
+                        selection-background-color: rgb(128, 128, 255); \
+                    }";
+    sDarkStyle   = "QLineEdit { \
+                        color: rgb(255, 255, 255); \
+                        background: rgb(0, 0, 0); \
+                        selection-background-color: rgb(128, 128, 255); \
+                    }";
+    sPhotoStyle  = "QLineEdit { \
+                        color: rgb(0, 0, 0); \
+                        background: rgb(255, 255, 0); \
+                        selection-background-color: rgb(128, 128, 255); \
+                    }";
+
+    sBlackStyle   = "QLabel { \
+                        color: rgb(255, 255, 255); \
+                        background: rgb(0, 0, 0); \
+                        selection-background-color: rgb(128, 128, 255); \
+                    }";
+    if(!gpioInit())
+        exit(EXIT_FAILURE);
+
+    pSetupDlg = new setupDialog(gpioHostHandle);
+
+    switchLampOff();
+
+    restoreSettings();
+
+    // Init User Interface with restored values
+    pUi->pathEdit->setText(sBaseDir);
+    pUi->nameEdit->setText(sOutFileName);
+    pUi->startButton->setEnabled(true);
+    pUi->stopButton->setDisabled(true);
+    pUi->intervalEdit->setText(QString("%1").arg(msecInterval));
+    pUi->tTimeEdit->setText(QString("%1").arg(secTotTime));
+    pUi->labelVideo->setStyleSheet(sBlackStyle);
+
+    intervalTimer.stop();// Probably non needed but...does'nt hurt
+    connect(&intervalTimer,
+            SIGNAL(timeout()),
+            this,
+            SLOT(onTimeToGetNewImage()));
 
     getSensorDefaults(commonSettings.cameraNum,
                       commonSettings.camera_name,
@@ -75,10 +151,120 @@ MainDialog::MainDialog(QWidget *parent)
 }
 
 
-MainDialog::~MainDialog() {
-    delete ui;
+void
+MainDialog::closeEvent(QCloseEvent *event) {
+    Q_UNUSED(event)
+    intervalTimer.stop();
+    switchLampOff();
+    // Save settings
+    QSettings settings;
+    settings.setValue("BaseDir", sBaseDir);
+    settings.setValue("FileName", sOutFileName);
+    settings.setValue("Interval", msecInterval);
+    settings.setValue("TotalTime", secTotTime);
+    // Free GPIO
+    if(gpioHostHandle >= 0)
+        pigpio_stop(gpioHostHandle);
 }
 
+
+MainDialog::~MainDialog() {
+    delete pUi;
+}
+
+
+void
+MainDialog::moveEvent(QMoveEvent *event) {
+    dialogPos = event->pos();
+    videoPos = pUi->labelVideo->pos();
+    videoSize = pUi->labelVideo->size();
+// TODO: move the Preview window !!
+}
+
+
+void
+MainDialog::restoreSettings() {
+    QSettings settings;
+    // Restore settings
+    sBaseDir        = settings.value("BaseDir",
+                                     QStandardPaths::writableLocation(QStandardPaths::PicturesLocation)).toString();
+    sOutFileName    = settings.value("FileName",
+                                     QString("test")).toString();
+    msecInterval    = settings.value("Interval", 10000).toInt();
+    secTotTime      = settings.value("TotalTime", 0).toInt();
+
+}
+
+
+void
+MainDialog::switchLampOn() {
+    if(gpioHostHandle >= 0)
+        gpio_write(gpioHostHandle, gpioLEDpin, 1);
+    else
+        QMessageBox::critical(this,
+                              QString("pigpiod Error"),
+                              QString("Unable to set GPIO%1 On")
+                              .arg(gpioLEDpin));
+    pUi->lampStatus->setStyleSheet(sPhotoStyle);
+    repaint();
+}
+
+
+void
+MainDialog::switchLampOff() {
+    if(gpioHostHandle >= 0)
+        gpio_write(gpioHostHandle, gpioLEDpin, 0);
+    else
+        QMessageBox::critical(this,
+                              QString("pigpiod Error"),
+                              QString("Unable to set GPIO%1 Off")
+                              .arg(gpioLEDpin));
+    pUi->lampStatus->setStyleSheet(sDarkStyle);
+    repaint();
+}
+
+
+
+bool
+MainDialog::gpioInit() {
+    int iResult;
+    gpioHostHandle = pigpio_start(QString("localhost").toLocal8Bit().data(),
+                                  QString("8888").toLocal8Bit().data());
+    if(gpioHostHandle < 0) {
+        QMessageBox::critical(this,
+                              QString("pigpiod Error !"),
+                              QString("Non riesco ad inizializzare la GPIO."));
+        return false;
+    }
+    // Led On/Off Control
+    iResult = set_mode(gpioHostHandle, gpioLEDpin, PI_OUTPUT);
+    if(iResult < 0) {
+        QMessageBox::critical(this,
+                              QString("pigpiod Error"),
+                              QString("Unable to initialize GPIO%1 as Output")
+                                   .arg(gpioLEDpin));
+        return false;
+    }
+
+    iResult = set_pull_up_down(gpioHostHandle, gpioLEDpin, PI_PUD_UP);
+    if(iResult < 0) {
+        QMessageBox::critical(this,
+                              QString("pigpiod Error"),
+                              QString("Unable to set GPIO%1 Pull-Up")
+                                   .arg(gpioLEDpin));
+        return false;
+    }
+    return true;
+}
+
+
+bool
+MainDialog::checkValues() {
+    QDir dir(sBaseDir);
+    if(!dir.exists())
+        return false;
+    return true;
+}
 
 
 void
@@ -131,11 +317,119 @@ MainDialog::getSensorDefaults(int camera_num, char *camera_name, int *width, int
 
 void
 MainDialog::on_startButton_clicked() {
+    if(!checkValues()) {
+        pUi->statusBar->setText((QString("Error: Check Values !")));
+        return;
+    }
+    imageNum = 0;
+
+//TODO:
+    intervalTimer.start(msecInterval);
+
+    QList<QLineEdit *> widgets = findChildren<QLineEdit *>();
+    for(int i=0; i<widgets.size(); i++) {
+        widgets[i]->setDisabled(true);
+    }
+    pUi->setupButton->setDisabled(true);
+    pUi->startButton->setDisabled(true);
+    pUi->stopButton->setEnabled(true);
     pCamera->start(pPreview);
 }
 
 
 void
 MainDialog::on_stopButton_clicked() {
+    intervalTimer.stop();
     pCamera->stop();
+    switchLampOff();
+    QList<QLineEdit *> widgets = findChildren<QLineEdit *>();
+    for(int i=0; i<widgets.size(); i++) {
+        widgets[i]->setEnabled(true);
+    }
+    pUi->startButton->setEnabled(true);
+    pUi->setupButton->setEnabled(true);
+    pUi->stopButton->setDisabled(true);
 }
+
+
+void
+MainDialog::on_setupButton_clicked() {
+    pSetupDlg->exec();
+}
+
+
+void
+MainDialog::on_intervalEdit_textEdited(const QString &arg1) {
+    if(arg1.toInt() < MIN_INTERVAL) {
+        pUi->intervalEdit->setStyleSheet(sErrorStyle);
+    } else {
+        msecInterval = arg1.toInt();
+        pUi->intervalEdit->setStyleSheet(sNormalStyle);
+    }
+}
+
+
+void
+MainDialog::on_intervalEdit_editingFinished() {
+    pUi->intervalEdit->setText(QString("%1").arg(msecInterval));
+    pUi->intervalEdit->setStyleSheet(sNormalStyle);
+}
+
+
+void
+MainDialog::on_tTimeEdit_textEdited(const QString &arg1) {
+    if(arg1.toInt() < 0) {
+        pUi->tTimeEdit->setStyleSheet(sErrorStyle);
+    } else {
+        secTotTime = arg1.toInt();
+        pUi->tTimeEdit->setStyleSheet(sNormalStyle);
+    }
+}
+
+
+void
+MainDialog::on_tTimeEdit_editingFinished() {
+    pUi->tTimeEdit->setText(QString("%1").arg(secTotTime));
+    pUi->tTimeEdit->setStyleSheet(sNormalStyle);
+}
+
+
+void
+MainDialog::on_pathEdit_textChanged(const QString &arg1) {
+    QDir dir(arg1);
+    if(!dir.exists()) {
+        pUi->pathEdit->setStyleSheet(sErrorStyle);
+    }
+    else {
+        pUi->pathEdit->setStyleSheet(sNormalStyle);
+    }
+}
+
+
+void
+MainDialog::on_pathEdit_editingFinished() {
+    sBaseDir = pUi->pathEdit->text();
+}
+
+
+void
+MainDialog::on_nameEdit_textChanged(const QString &arg1) {
+    sOutFileName = arg1;
+}
+
+
+//////////////////////////////////////////////////////////////
+/// Acquisition timer handler <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+//////////////////////////////////////////////////////////////
+void
+MainDialog::onTimeToGetNewImage() {
+    switchLampOn();
+    QThread::msleep(10);
+    int iErr = kill(pid, SIGUSR1);
+    if(iErr == -1) {
+        pUi->statusBar->setText(QString("Error %1 in sending SIGUSR1 signal"));
+    }
+    QThread::msleep(300);
+    switchLampOff();
+}
+

@@ -1,11 +1,14 @@
 #pragma once
 
 #include <QDialog>
+#include <QTimer>
+#include <sys/types.h>
 
 #include "picamera.h"
 #include "preview.h"
 #include "cameracontrol.h"
 #include "commonsettings.h"
+#include "setupdialog.h"
 
 
 // Structure containing all state information for the current run
@@ -36,20 +39,69 @@ class MainDialog : public QDialog
 
 public:
     explicit MainDialog(QWidget *parent = nullptr);
-    ~MainDialog();
+    ~MainDialog() Q_DECL_OVERRIDE;
 
 protected:
+    void moveEvent(QMoveEvent *event) Q_DECL_OVERRIDE;
+    void restoreSettings();
+    void closeEvent(QCloseEvent *event) Q_DECL_OVERRIDE;
+    void switchLampOn();
+    void switchLampOff();
+    bool checkValues();
+    bool gpioInit();
     void getSensorDefaults(int camera_num, char *camera_name, int *width, int *height);
 
 private slots:
     void on_startButton_clicked();
     void on_stopButton_clicked();
+    void on_setupButton_clicked();
+    void on_intervalEdit_textEdited(const QString &arg1);
+    void on_intervalEdit_editingFinished();
+    void on_tTimeEdit_textEdited(const QString &arg1);
+    void on_tTimeEdit_editingFinished();
+    void onTimeToGetNewImage();
+    void on_pathEdit_textChanged(const QString &arg1);
+    void on_pathEdit_editingFinished();
+    void on_nameEdit_textChanged(const QString &arg1);
 
 private:
-    Ui::MainDialog *ui;
+    Ui::MainDialog* pUi;
     PiCamera* pCamera;
     Preview* pPreview;
     CameraControl* pCameraControl;
     CommonSettings commonSettings;
     APP_STATE state;
+
+    setupDialog*    pSetupDlg;
+
+    pid_t pid;
+
+    uint   gpioLEDpin;
+    uint   panPin;
+    uint   tiltPin;
+    double cameraPanAngle;
+    double cameraTiltAngle;
+    uint   PWMfrequency;     // in Hz
+    double pulseWidthAt_90;  // in us
+    double pulseWidthAt90;   // in us
+    int    gpioHostHandle;
+
+    int    msecInterval;
+    int    secTotTime;
+    int    imageNum;
+
+    QString sNormalStyle;
+    QString sErrorStyle;
+    QString sDarkStyle;
+    QString sPhotoStyle;
+    QString sBlackStyle;
+
+    QString sBaseDir;
+    QString sOutFileName;
+
+    QTimer intervalTimer;
+
+    QPoint dialogPos;
+    QPoint videoPos;
+    QSize videoSize;
 };

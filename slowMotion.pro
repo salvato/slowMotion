@@ -20,28 +20,31 @@ CONFIG += c++14
 
 
 SOURCES += main.cpp
+SOURCES += setupdialog.cpp
 SOURCES += picamera.cpp
 SOURCES += maindialog.cpp
 SOURCES += preview.cpp
 SOURCES += commonsettings.cpp
 SOURCES += cameracontrol.cpp
-SOURCES += rpicam.cpp
 
 
 INCLUDEPATH += $$SDKSTAGE/include/
 INCLUDEPATH+=-I$(SDKSTAGE)/include/interface/vcos/pthreads
 INCLUDEPATH+=-I$(SDKSTAGE)/include/interface/vmcs_host/linux
 
+INCLUDEPATH += /usr/local/include
+
 
 HEADERS += maindialog.h
+HEADERS += setupdialog.h
 HEADERS += picamera.h
 HEADERS += preview.h
 HEADERS += commonsettings.h
 HEADERS += cameracontrol.h
-HEADERS += rpicam.h
 
 
 FORMS += maindialog.ui
+FORMS += setupdialog.ui
 
 
 LIBS+= -L$$SDKSTAGE/lib
@@ -53,8 +56,13 @@ LIBS += -lmmal
 LIBS += -lmmal_core
 LIBS += -lmmal_util
 
+LIBS += -L"/usr/local/lib" -lpigpiod_if2
+
 
 # Default rules for deployment.
 qnx: target.path = /tmp/$${TARGET}/bin
 else: unix:!android: target.path = /opt/$${TARGET}/bin
 !isEmpty(target.path): INSTALLS += target
+
+DISTFILES += \
+    movie.png

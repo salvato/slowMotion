@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>754</width>
-    <height>259</height>
+    <height>301</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -212,6 +212,22 @@
    </property>
    <property name="text">
     <string>ms</string>
+   </property>
+  </widget>
+  <widget class="QLabel" name="statusBar">
+   <property name="geometry">
+    <rect>
+     <x>20</x>
+     <y>270</y>
+     <width>714</width>
+     <height>22</height>
+    </rect>
+   </property>
+   <property name="frameShape">
+    <enum>QFrame::NoFrame</enum>
+   </property>
+   <property name="text">
+    <string/>
    </property>
   </widget>
  </widget>
