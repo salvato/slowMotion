@@ -39,14 +39,16 @@ public:
     MMAL_STATUS_T start(Preview* pPreview);
     void stop();
 
+public:
+    MMAL_COMPONENT_T *cameraComponent;// The Camera Component
+    CameraControl cameraControl;
+
 protected:
     MMAL_STATUS_T connectPorts(MMAL_PORT_T *output_port, MMAL_PORT_T *input_port, MMAL_CONNECTION_T **connection);
     void handleError(MMAL_STATUS_T status, Preview *pPreview);
     void checkDisablePort(MMAL_PORT_T *port);
 
 private:
-    MMAL_COMPONENT_T *cameraComponent;// The Camera Component
     MMAL_CONNECTION_T *previewConnection;
     MMAL_POOL_T *pool;
-    CameraControl cameraControl;
 };

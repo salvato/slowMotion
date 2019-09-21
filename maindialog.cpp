@@ -146,6 +146,7 @@ MainDialog::MainDialog(QWidget *parent)
         exit(EXIT_FAILURE);
     }
     pCamera->createBufferPool();
+    pCameraControl->set_flips(pCamera->cameraComponent, 0, 1);
 }
 
 
