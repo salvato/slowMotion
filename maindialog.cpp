@@ -175,9 +175,14 @@ MainDialog::~MainDialog() {
 void
 MainDialog::moveEvent(QMoveEvent *event) {
     dialogPos = event->pos();
-    videoPos = pUi->labelVideo->pos();
+    videoPos  = pUi->labelVideo->pos();
     videoSize = pUi->labelVideo->size();
-// TODO: move the Preview window !!
+    MMAL_RECT_T previewWindow = {dialogPos.x()+videoPos.x(),
+                                 dialogPos.y()+videoPos.y(),
+                                 videoSize.width(),
+                                 videoSize.height()};
+    pPreview->setScreenPos(previewWindow);
+    qDebug() << videoPos << videoSize;
 }
 
 

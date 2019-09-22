@@ -20,39 +20,44 @@ Preview::Preview() {
 MMAL_STATUS_T
 Preview::createComponent() {
     // Convenient variables
-    MMAL_COMPONENT_T *preview = nullptr;
     MMAL_PORT_T *preview_port = nullptr;
     MMAL_STATUS_T status;
 
     if(!wantPreview) {
         // No preview required, so create a null sink component to take its place
-        status = mmal_component_create("vc.null_sink", &preview);
+        status = mmal_component_create("vc.null_sink", &previewComponent);
         if(status != MMAL_SUCCESS) {
             qDebug() << QString("Unable to create null sink component");
-            if(preview)
-                mmal_component_destroy(preview);
+            if(previewComponent)
+                mmal_component_destroy(previewComponent);
             return status;
         }
     }
     else {
         status = mmal_component_create(MMAL_COMPONENT_DEFAULT_VIDEO_RENDERER,
-                                       &preview);
+                                       &previewComponent);
         if(status != MMAL_SUCCESS) {
             qDebug() << QString("Unable to create preview component");
-            if(preview)
-                mmal_component_destroy(preview);
+            if(previewComponent)
+                mmal_component_destroy(previewComponent);
             return status;
         }
-        if(!preview->input_num) {
+        if(!previewComponent->input_num) {
             status = MMAL_ENOSYS;
             qDebug() << QString("No input ports found on component");
-            mmal_component_destroy(preview);
+            mmal_component_destroy(previewComponent);
             return status;
         }
-        preview_port = preview->input[0];
+        preview_port = previewComponent->input[0];
         MMAL_DISPLAYREGION_T param;
+
         param.hdr.id = MMAL_PARAMETER_DISPLAYREGION;
         param.hdr.size = sizeof(MMAL_DISPLAYREGION_T);
+/**
+ * param.set is a Bitfield that indicates which fields are set and should be used.
+ *  All other fields will maintain their current value.
+ *  MMAL_DISPLAYSET_T defines the bits that can be combined.
+ */
         param.set = MMAL_DISPLAY_SET_LAYER;
         param.layer = PREVIEW_LAYER;
 
@@ -70,18 +75,17 @@ Preview::createComponent() {
         status = mmal_port_parameter_set(preview_port, &param.hdr);
         if(status != MMAL_SUCCESS && status != MMAL_ENOSYS) {
             qDebug() << QString("unable to set preview port parameters (%1)").arg(status);
-            mmal_component_destroy(preview);
+            mmal_component_destroy(previewComponent);
             return status;
         }
     }
     // Enable component
-    status = mmal_component_enable(preview);
+    status = mmal_component_enable(previewComponent);
     if(status != MMAL_SUCCESS) {
         qDebug() << QString("Unable to enable preview/null sink component (%u)").arg(status);
-        mmal_component_destroy(preview);
+        mmal_component_destroy(previewComponent);
         return status;
     }
-    previewComponent = preview;
     return status;
 }
 
@@ -112,3 +116,22 @@ Preview::dump_parameters() {
                .arg(opacity);
 }
 
+
+MMAL_STATUS_T
+Preview::setScreenPos(MMAL_RECT_T previewWindow) {
+    MMAL_STATUS_T status = MMAL_SUCCESS;
+    MMAL_PORT_T *previewPort = previewComponent->input[0];
+    MMAL_DISPLAYREGION_T param;
+
+    param.hdr.id = MMAL_PARAMETER_DISPLAYREGION;
+    param.hdr.size = sizeof(MMAL_DISPLAYREGION_T);
+    param.set = (MMAL_DISPLAY_SET_DEST_RECT | MMAL_DISPLAY_SET_FULLSCREEN);
+    param.fullscreen = 0;
+    param.dest_rect = previewWindow;
+    status = mmal_port_parameter_set(previewPort, &param.hdr);
+    if(status != MMAL_SUCCESS && status != MMAL_ENOSYS) {
+        qDebug() << QString("unable to set preview port parameters (%1)").arg(status);
+        mmal_component_destroy(previewComponent);
+    }
+    return status;
+}

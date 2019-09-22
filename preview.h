@@ -19,6 +19,7 @@ public:
     MMAL_STATUS_T createComponent();
     void destroy();
     void dump_parameters();
+    MMAL_STATUS_T setScreenPos(MMAL_RECT_T previewWindow);
 
 protected:
 
