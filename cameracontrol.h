@@ -91,20 +91,21 @@ typedef struct {
     int shutter_speed;         /// 0 = auto, otherwise the shutter speed in ms
     float awb_gains_r;         /// AWB red gain
     float awb_gains_b;         /// AWB blue gain
-    MMAL_PARAMETER_DRC_STRENGTH_T drc_level;  // Strength of Dynamic Range compression to apply
+    MMAL_PARAMETER_DRC_STRENGTH_T drc_level;  /// Strength of Dynamic Range compression to apply
     MMAL_BOOL_T stats_pass;    /// Stills capture statistics pass on/off
     int enable_annotate;       /// Flag to enable the annotate, 0 = disabled, otherwise a bitmask of what needs to be displayed
     char annotate_string[MMAL_CAMERA_ANNOTATE_MAX_TEXT_LEN_V2]; /// String to use for annotate - overrides certain bitmask settings
-    int annotate_text_size;    // Text size for annotation
-    int annotate_text_colour;  // Text colour for annotation
-    int annotate_bg_colour;    // Background colour for annotation
+    int annotate_text_size;    /// Text size for annotation
+    int annotate_text_colour;  /// Text colour for annotation
+    int annotate_bg_colour;    /// Background colour for annotation
     unsigned int annotate_justify;
     unsigned int annotate_x;
     unsigned int annotate_y;
     MMAL_PARAMETER_STEREOSCOPIC_MODE_T stereo_mode;
-    float analog_gain;         // Analog gain
-    float digital_gain;        // Digital gain
+    float analog_gain;         /// Analog gain
+    float digital_gain;        /// Digital gain
     int settings;
+    int onlyLuma;              /// Only output the luma / Y plane of the YUV data
 } RASPICAM_CAMERA_PARAMETERS;
 
 

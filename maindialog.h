@@ -18,7 +18,6 @@ typedef struct {
     int fullResPreview;                 /// If set, the camera preview port runs at capture resolution. Reduces fps.
     int frameNextMethod;                /// Which method to use to advance to next frame
     int burstCaptureMode;               /// Enable burst mode
-    int onlyLuma;                       /// Only output the luma / Y plane of the YUV data
     MMAL_FOURCC_T encoding;             /// Use a MMAL encoding other than YUV
     char *linkname;                     /// filename of output file
 

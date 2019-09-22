@@ -9,6 +9,14 @@
 #define MY_VCOS_ALIGN_UP(p,n) MY_VCOS_ALIGN_DOWN(reinterpret_cast<ptrdiff_t>((p)+(n)-1),(n))
 
 
+// Struct used to pass information in camera still port userdata to callback
+typedef struct {
+    FILE *file_handle;                   /// File handle to write buffer data to.
+    VCOS_SEMAPHORE_T complete_semaphore; /// semaphore which is posted when we reach end of frame (indicates end of capture or fault)
+    PiCamera *pCamera;                   /// pointer to our camera in case required in callback
+} PORT_USERDATA;
+
+
 /** Default camera callback function
  * Handles the --settings
  * @param port
@@ -50,10 +58,62 @@ default_camera_control_callback(MMAL_PORT_T *port, MMAL_BUFFER_HEADER_T *buffer)
 }
 
 
+/// buffer header callback function for camera output port
+/// Callback will dump buffer data to the specific file
+/// port Pointer to port from which callback originated
+/// buffer mmal buffer header pointer
+static void
+cameraBufferCallback(MMAL_PORT_T *port, MMAL_BUFFER_HEADER_T *buffer) {
+    int complete = 0;
+    // We pass our file handle and other stuff in via the userdata field.
+    PORT_USERDATA *pData = reinterpret_cast<PORT_USERDATA *>(port->userdata);
+    if(pData) {
+        uint bytes_written = 0;
+        uint bytes_to_write = buffer->length;
+        if(pData->pCamera->cameraControl.cameraParameters.onlyLuma)
+            bytes_to_write = vcos_min(buffer->length, port->format->es->video.width * port->format->es->video.height);
+        if(bytes_to_write && pData->file_handle) {
+            mmal_buffer_header_mem_lock(buffer);
+            bytes_written = fwrite(buffer->data, 1, bytes_to_write, pData->file_handle);
+            mmal_buffer_header_mem_unlock(buffer);
+        }
+        // We need to check we wrote what we wanted - it's possible we have run out of storage.
+        if(buffer->length && bytes_written != bytes_to_write) {
+            qDebug() << QString("Unable to write buffer to file - aborting %1 vs %2")
+                        .arg(bytes_written)
+                        .arg(bytes_to_write);
+            complete = 1;
+        }
+        // Check end of frame or error
+        if(buffer->flags & (MMAL_BUFFER_HEADER_FLAG_FRAME_END | MMAL_BUFFER_HEADER_FLAG_TRANSMISSION_FAILED))
+            complete = 1;
+    }
+    else{
+        qDebug() << QString("Received a camera still buffer callback with no state");
+    }
+    // release buffer back to the pool
+    mmal_buffer_header_release(buffer);
+    // and send one back to the port (if still open)
+    if(port->is_enabled) {
+        MMAL_STATUS_T status = MMAL_SUCCESS;
+        MMAL_BUFFER_HEADER_T *new_buffer = mmal_queue_get(pData->pCamera->pool->queue);
+        // and back to the port from there.
+        if(new_buffer) {
+            status = mmal_port_send_buffer(port, new_buffer);
+        }
+        if(!new_buffer || status != MMAL_SUCCESS)
+            qDebug() << QString("Unable to return the buffer to the camera still port");
+    }
+    if(complete) {
+        vcos_semaphore_post(&(pData->complete_semaphore));
+    }
+}
+
+
 PiCamera::PiCamera()
     : cameraComponent(nullptr)
-    , previewConnection(nullptr)
     , pool(nullptr)
+    , previewConnection(nullptr)
 {
 }
 
@@ -363,6 +423,128 @@ PiCamera::start(Preview *pPreview) {
         handleError(status, pPreview);
         return status;
     }
+    VCOS_STATUS_T vcos_status;
+    // Set up our userdata:
+    // this is passed through to the callback where we need the information.
+    // Null until we open our filename
+    PORT_USERDATA callback_data;
+    callback_data.file_handle = nullptr;
+    callback_data.pCamera = this;
+    vcos_status = vcos_semaphore_create(&callback_data.complete_semaphore, "RaspiStill-sem", 0);
+    vcos_assert(vcos_status == VCOS_SUCCESS);
+    MMAL_PORT_T* camera_still_port   = cameraComponent->output[MMAL_CAMERA_CAPTURE_PORT];
+
+    camera_still_port->userdata = reinterpret_cast<struct MMAL_PORT_USERDATA_T *>(&callback_data);
+    if (verbose)
+        qDebug() << QString("Enabling camera still output port");
+    // Enable the camera still output port and tell it its callback function
+    status = mmal_port_enable(camera_still_port, cameraBufferCallback);
+    if (status != MMAL_SUCCESS) {
+        qDebug() << QString("Failed to setup camera output");
+        handleError(status, pPreview);
+    }
+    int frame, keep_looping = 1;
+    FILE *output_file = nullptr;
+    char *use_filename = nullptr;      // Temporary filename while image being written
+    char *final_filename = nullptr;    // Name that file gets once writing complete
+    frame = 0;
+    while(keep_looping) {
+        keep_looping = wait_for_next_frame(&state, &frame);
+        // Open the file
+        if(state.common_settings.filename) {
+            if (state.common_settings.filename[0] == '-') {
+                output_file = stdout;
+                // Ensure we don't upset the output stream with diagnostics/info
+                state.common_settings.verbose = 0;
+            }
+            else {
+                vcos_assert(use_filename == NULL && final_filename == NULL);
+                status = create_filenames(&final_filename, &use_filename, state.common_settings.filename, frame);
+                if (status  != MMAL_SUCCESS) {
+                    qDebug() << QString("Unable to create filenames");
+                    goto error;
+                }
+                if (state.common_settings.verbose)
+                    qDebug() << QString("Opening output file %1").arg(final_filename);
+                // Technically it is opening the temp~ filename which will be ranamed
+                // to the final filename
+                output_file = fopen(use_filename, "wb");
+                if (!output_file) {
+                    // Notify user, carry on but discarding encoded output buffers
+                    qDebug() << QString("%1: Error opening output file: %2\nNo output file will be generated")
+                                .arg(__func__)
+                                .arg(use_filename);
+                }
+            }
+            callback_data.file_handle = output_file;
+        }
+        if(output_file) {
+            uint num, q;
+            // There is a possibility that shutter needs to be set each loop.
+            if (mmal_status_to_int(mmal_port_parameter_set_uint32(state.camera_component->control,
+                                                                  MMAL_PARAMETER_SHUTTER_SPEED,
+                                                                  (uint32_t)state.camera_parameters.shutter_speed) != MMAL_SUCCESS))
+                qDebug() << QString("Unable to set shutter speed");
+            // Send all the buffers to the camera output port
+            num = mmal_queue_length(state.camera_pool->queue);
+            for (q=0; q<num; q++) {
+                MMAL_BUFFER_HEADER_T *buffer = mmal_queue_get(state.camera_pool->queue);
+                if (!buffer)
+                    qDebug() << QString("Unable to get a required buffer %d from pool queue", q);
+                if (mmal_port_send_buffer(camera_still_port, buffer)!= MMAL_SUCCESS)
+                    qDebug() << QString("Unable to send a buffer to camera output port (%d)", q);
+            }
+            if (state.burstCaptureMode && frame==1) {
+                mmal_port_parameter_set_boolean(state.camera_component->control,  MMAL_PARAMETER_CAMERA_BURST_CAPTURE, 1);
+            }
+            if(state.camera_parameters.enable_annotate) {
+                if (state.camera_parameters.enable_annotate & ANNOTATE_APP_TEXT)
+                    raspicamcontrol_set_annotate(state.camera_component,
+                                                 state.camera_parameters.enable_annotate,
+                                                 state.camera_parameters.annotate_string,
+                                                 state.camera_parameters.annotate_text_size,
+                                                 state.camera_parameters.annotate_text_colour,
+                                                 state.camera_parameters.annotate_bg_colour,
+                                                 state.camera_parameters.annotate_justify,
+                                                 state.camera_parameters.annotate_x,
+                                                 state.camera_parameters.annotate_y
+                                                 );
+            }
+            if (state.common_settings.verbose)
+                qDebug() << QString("Starting capture %d").arg(frame);
+            if (mmal_port_parameter_set_boolean(camera_still_port, MMAL_PARAMETER_CAPTURE, 1) != MMAL_SUCCESS) {
+                qDebug() << QString("%1: Failed to start capture").arg(__func__);
+            }
+            else {
+                // Wait for capture to complete
+                // For some reason using vcos_semaphore_wait_timeout sometimes returns immediately with bad parameter error
+                // even though it appears to be all correct, so reverting to untimed one until figure out why its erratic
+                vcos_semaphore_wait(&callback_data.complete_semaphore);
+                if (state.common_settings.verbose)
+                    qDebug() << QString("Finished capture %1").arg(frame);
+            }
+            // Ensure we don't die if get callback with no open file
+            callback_data.file_handle = nullptr;
+            if (output_file != stdout) {
+                rename_file(&state, output_file, final_filename, use_filename, frame);
+            }
+            else {
+                fflush(output_file);
+            }
+        }
+        if (use_filename) {
+            free(use_filename);
+            use_filename = nullptr;
+        }
+        if (final_filename) {
+            free(final_filename);
+            final_filename = nullptr;
+        }
+    } // end for (frame)
+    vcos_semaphore_delete(&callback_data.complete_semaphore);
+}
+
+
     return MMAL_SUCCESS;
 }
 
@@ -426,3 +608,8 @@ MMAL_PORT_T *camera_video_port = cameraComponent->output[MMAL_CAMERA_VIDEO_PORT]
         mmal_connection_destroy(previewConnection);
 }
 
+
+/*
+            if (state.common_settings.verbose)
+                fprintf(stderr, "Starting video preview\n");
+ */

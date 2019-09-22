@@ -12,11 +12,14 @@
 #include "commonsettings.h"
 #include "preview.h"
 
+#include <stdio.h>
+
 
 // Standard port setting for the camera component
 #define MMAL_CAMERA_PREVIEW_PORT 0
 #define MMAL_CAMERA_VIDEO_PORT   1
 #define MMAL_CAMERA_CAPTURE_PORT 2
+
 
 
 class PiCamera
@@ -42,6 +45,7 @@ public:
 public:
     MMAL_COMPONENT_T *cameraComponent;// The Camera Component
     CameraControl cameraControl;
+    MMAL_POOL_T *pool;
 
 protected:
     MMAL_STATUS_T connectPorts(MMAL_PORT_T *output_port, MMAL_PORT_T *input_port, MMAL_CONNECTION_T **connection);
@@ -50,5 +54,4 @@ protected:
 
 private:
     MMAL_CONNECTION_T *previewConnection;
-    MMAL_POOL_T *pool;
 };
