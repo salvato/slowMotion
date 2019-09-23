@@ -13,6 +13,7 @@
 #include "preview.h"
 
 #include <stdio.h>
+#include <QString>
 
 
 // Standard port setting for the camera component
@@ -41,7 +42,7 @@ public:
     void destroyComponent();
     MMAL_STATUS_T start(Preview* pPreview);
     void stop();
-    void capture();
+    void capture(QString sPathName);
 
 public:
     MMAL_COMPONENT_T *cameraComponent;// The Camera Component

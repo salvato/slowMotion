@@ -622,13 +622,16 @@ MMAL_PORT_T *camera_video_port = cameraComponent->output[MMAL_CAMERA_VIDEO_PORT]
 
 
 void
-PiCamera::capture() {
-    FILE *output_file = fopen("temp.jpg", "wb");
+PiCamera::capture(QString sPathName) {
+    FILE *output_file = fopen(sPathName.toLatin1(), "wb");
     if (!output_file) {
 // Notify user, carry on but discarding encoded output buffers
         qDebug() << QString("%1: Error opening output file: %2\nNo output file will be generated")
                     .arg(__func__)
-                    .arg("temp.jpg");
+                    .arg(sPathName);
+    }
+    else {
+        qDebug() << "Writing" << sPathName;
     }
     callbackData.file_handle = output_file;
     MMAL_PORT_T* cameraStillPort = cameraComponent->output[MMAL_CAMERA_CAPTURE_PORT];

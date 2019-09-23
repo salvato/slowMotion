@@ -428,9 +428,13 @@ void
 MainDialog::onTimeToGetNewImage() {
     switchLampOn();
     QThread::msleep(10);
-    pCamera->capture();
-// TODO:
+    QString sFileName = QString("%1/%2_%3.jpg")
+            .arg(sBaseDir)
+            .arg(sOutFileName)
+            .arg(imageNum, 4, 10, QLatin1Char('0'));
+    pCamera->capture(sFileName);
     QThread::msleep(300);
     switchLampOff();
+    imageNum++;
 }
 
