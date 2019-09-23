@@ -88,7 +88,8 @@ cameraBufferCallback(MMAL_PORT_T *port, MMAL_BUFFER_HEADER_T *buffer) {
             complete = 1;
         }
         // Check end of frame or error
-        if(buffer->flags & (MMAL_BUFFER_HEADER_FLAG_FRAME_END | MMAL_BUFFER_HEADER_FLAG_TRANSMISSION_FAILED))
+        if(buffer->flags & (MMAL_BUFFER_HEADER_FLAG_FRAME_END |
+                            MMAL_BUFFER_HEADER_FLAG_TRANSMISSION_FAILED))
             complete = 1;
     }
     else{
@@ -405,6 +406,8 @@ PiCamera::createBufferPool() {
     // Create pool of buffer headers for the output port to consume
     // Utility variables
     MMAL_PORT_T *still_port = cameraComponent->output[MMAL_CAMERA_CAPTURE_PORT];
+    qDebug() << "still_port buffer size  :" << still_port->buffer_size;
+    qDebug() << "still_port buffer number:" << still_port->buffer_num;
     pool = mmal_port_pool_create(still_port, still_port->buffer_num, still_port->buffer_size);
     if(!pool) {
         qDebug() << QString("Failed to create buffer header pool for camera still port %1")
@@ -613,7 +616,7 @@ MMAL_PORT_T *camera_video_port = cameraComponent->output[MMAL_CAMERA_VIDEO_PORT]
     MMAL_PORT_T* camera_still_port = cameraComponent->output[MMAL_CAMERA_CAPTURE_PORT];
     if(verbose)
         qDebug() << QString("Disabling camera still output port");
-    // Disable the camera still output port and tell it its callback function
+    // Disable the camera still output port
     checkDisablePort(camera_still_port);
 }
 
@@ -622,12 +625,11 @@ void
 PiCamera::capture() {
     FILE *output_file = fopen("temp.jpg", "wb");
     if (!output_file) {
-        // Notify user, carry on but discarding encoded output buffers
+// Notify user, carry on but discarding encoded output buffers
         qDebug() << QString("%1: Error opening output file: %2\nNo output file will be generated")
                     .arg(__func__)
                     .arg("temp.jpg");
     }
-
     callbackData.file_handle = output_file;
     MMAL_PORT_T* cameraStillPort = cameraComponent->output[MMAL_CAMERA_CAPTURE_PORT];
 // Send all the buffers to the camera output port
@@ -641,17 +643,14 @@ PiCamera::capture() {
     }
     if (verbose)
         qDebug() << QString("Starting capture...");
-    checkDisablePort(cameraStillPort);
     if (mmal_port_parameter_set_boolean(cameraStillPort, MMAL_PARAMETER_CAPTURE, 1) != MMAL_SUCCESS) {
         qDebug() << QString("%1: Failed to start capture").arg(__func__);
     }
     else {
-        // Wait for capture to complete
-        // For some reason using vcos_semaphore_wait_timeout sometimes returns immediately with bad parameter error
-        // even though it appears to be all correct, so reverting to untimed one until figure out why its erratic
+// Wait for capture to complete
         vcos_semaphore_wait(&callbackData.complete_semaphore);
         if(verbose)
-            qDebug() << QString("Finished capture1");
+            qDebug() << QString("Capture Done !");
     }
     fflush(output_file);
 }

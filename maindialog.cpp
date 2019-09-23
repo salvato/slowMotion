@@ -182,7 +182,6 @@ MainDialog::moveEvent(QMoveEvent *event) {
                                  videoSize.width(),
                                  videoSize.height()};
     pPreview->setScreenPos(previewWindow);
-    qDebug() << videoPos << videoSize;
 }
 
 
