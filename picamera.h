@@ -41,6 +41,7 @@ public:
     void destroyComponent();
     MMAL_STATUS_T start(Preview* pPreview);
     void stop();
+    void capture();
 
 public:
     MMAL_COMPONENT_T *cameraComponent;// The Camera Component

@@ -17,6 +17,9 @@ typedef struct {
 } PORT_USERDATA;
 
 
+static PORT_USERDATA callbackData;
+
+
 /** Default camera callback function
  * Handles the --settings
  * @param port
@@ -115,6 +118,9 @@ PiCamera::PiCamera()
     , pool(nullptr)
     , previewConnection(nullptr)
 {
+    VCOS_STATUS_T vcos_status;
+    vcos_status = vcos_semaphore_create(&callbackData.complete_semaphore, "RaspiStill-sem", 0);
+    vcos_assert(vcos_status == VCOS_SUCCESS);
 }
 
 
@@ -125,8 +131,10 @@ PiCamera::createComponent(int cameraNum, int sensorMode) {
     status = mmal_component_create(MMAL_COMPONENT_DEFAULT_CAMERA, &cameraComponent);
     if(status != MMAL_SUCCESS) {
         qDebug() << QString("Failed to create camera component");
-        if(cameraComponent)
+        if(cameraComponent) {
             mmal_component_destroy(cameraComponent);
+            cameraComponent = nullptr;
+        }
         return status;
     }
     MMAL_PARAMETER_INT32_T camera_num = {
@@ -136,15 +144,19 @@ PiCamera::createComponent(int cameraNum, int sensorMode) {
     status = mmal_port_parameter_set(cameraComponent->control, &camera_num.hdr);
     if(status != MMAL_SUCCESS) {
         qDebug() << QString("Could not select camera : error %1").arg(status);
-        if(cameraComponent)
+        if(cameraComponent) {
             mmal_component_destroy(cameraComponent);
+            cameraComponent = nullptr;
+        }
         return status;
     }
     if(!cameraComponent->output_num) {
         status = MMAL_ENOSYS;
         qDebug() << QString("Camera doesn't have output ports");
-        if(cameraComponent)
+        if(cameraComponent) {
             mmal_component_destroy(cameraComponent);
+            cameraComponent = nullptr;
+        }
         return status;
     }
     status = mmal_port_parameter_set_uint32(cameraComponent->control,
@@ -152,22 +164,17 @@ PiCamera::createComponent(int cameraNum, int sensorMode) {
                                             uint32_t(sensorMode));
     if(status != MMAL_SUCCESS) {
         qDebug() << QString("Could not set sensor mode : error %1").arg(status);
-        if(cameraComponent)
+        if(cameraComponent) {
             mmal_component_destroy(cameraComponent);
+            cameraComponent = nullptr;
+        }
     }
     return status;
 }
 
 
 PiCamera::~PiCamera() {
-    if(cameraComponent) {
-        MMAL_PORT_T *still_port = cameraComponent->output[MMAL_CAMERA_CAPTURE_PORT];
-        if(pool)
-            mmal_port_pool_destroy(still_port, pool);
-        mmal_component_destroy(cameraComponent);
-    }
-    cameraComponent = nullptr;
-    pool = nullptr;
+    destroyComponent();
 }
 
 
@@ -191,7 +198,7 @@ PiCamera::setCallback() {
     status = mmal_port_enable(cameraComponent->control, default_camera_control_callback);
     if(status != MMAL_SUCCESS ){
         qDebug() << QString("Unable to enable control port : error %1").arg(status);
-        mmal_component_destroy(cameraComponent);
+        destroyComponent();
     }
     return status;
 }
@@ -423,19 +430,13 @@ PiCamera::start(Preview *pPreview) {
         handleError(status, pPreview);
         return status;
     }
-    VCOS_STATUS_T vcos_status;
+    MMAL_PORT_T* camera_still_port   = cameraComponent->output[MMAL_CAMERA_CAPTURE_PORT];
     // Set up our userdata:
     // this is passed through to the callback where we need the information.
-    // Null until we open our filename
-    PORT_USERDATA callback_data;
-    callback_data.file_handle = nullptr;
-    callback_data.pCamera = this;
-    vcos_status = vcos_semaphore_create(&callback_data.complete_semaphore, "RaspiStill-sem", 0);
-    vcos_assert(vcos_status == VCOS_SUCCESS);
-    MMAL_PORT_T* camera_still_port   = cameraComponent->output[MMAL_CAMERA_CAPTURE_PORT];
-
-    camera_still_port->userdata = reinterpret_cast<struct MMAL_PORT_USERDATA_T *>(&callback_data);
-    if (verbose)
+    callbackData.file_handle = nullptr;    // Null until we open our filename
+    callbackData.pCamera = this;
+    camera_still_port->userdata = reinterpret_cast<struct MMAL_PORT_USERDATA_T *>(&callbackData);
+    if(verbose)
         qDebug() << QString("Enabling camera still output port");
     // Enable the camera still output port and tell it its callback function
     status = mmal_port_enable(camera_still_port, cameraBufferCallback);
@@ -443,6 +444,7 @@ PiCamera::start(Preview *pPreview) {
         qDebug() << QString("Failed to setup camera output");
         handleError(status, pPreview);
     }
+/*
     int frame, keep_looping = 1;
     FILE *output_file = nullptr;
     char *use_filename = nullptr;      // Temporary filename while image being written
@@ -466,7 +468,7 @@ PiCamera::start(Preview *pPreview) {
                 }
                 if (state.common_settings.verbose)
                     qDebug() << QString("Opening output file %1").arg(final_filename);
-                // Technically it is opening the temp~ filename which will be ranamed
+                // Technically it is opening the temp~ filename which will be renamed
                 // to the final filename
                 output_file = fopen(use_filename, "wb");
                 if (!output_file) {
@@ -543,16 +545,15 @@ PiCamera::start(Preview *pPreview) {
     } // end for (frame)
     vcos_semaphore_delete(&callback_data.complete_semaphore);
 }
-
-
+*/
     return MMAL_SUCCESS;
 }
 
 
 /// Connect two specific ports together
-/// output_port Pointer the output port
-/// input_port Pointer the input port
-/// connection Pointer to a mmal connection pointer, reassigned if function successful
+/// @param output_port Pointer the output port
+/// @param input_port Pointer the input port
+/// @param connection Pointer to a mmal connection pointer, reassigned if function successful
 /// Returns a MMAL_STATUS_T giving result of operation
 MMAL_STATUS_T
 PiCamera::connectPorts(MMAL_PORT_T *output_port, MMAL_PORT_T *input_port, MMAL_CONNECTION_T **connection) {
@@ -576,6 +577,8 @@ PiCamera::handleError(MMAL_STATUS_T status, Preview *pPreview) {
     // Disable all our ports that are not handled by connections
     MMAL_PORT_T *camera_video_port = cameraComponent->output[MMAL_CAMERA_VIDEO_PORT];
     checkDisablePort(camera_video_port);
+    MMAL_PORT_T* cameraStillPort = cameraComponent->output[MMAL_CAMERA_CAPTURE_PORT];
+    checkDisablePort(cameraStillPort);
     if(previewConnection)
         mmal_connection_destroy(previewConnection);
     // Disable components
@@ -592,7 +595,7 @@ PiCamera::handleError(MMAL_STATUS_T status, Preview *pPreview) {
 
 
 /// Checks if specified port is valid and enabled, then disables it
-/// port  Pointer the port
+/// @param port Pointer the port
 void
 PiCamera::checkDisablePort(MMAL_PORT_T *port) {
    if(port && port->is_enabled)
@@ -606,10 +609,49 @@ MMAL_PORT_T *camera_video_port = cameraComponent->output[MMAL_CAMERA_VIDEO_PORT]
     checkDisablePort(camera_video_port);
     if(previewConnection)
         mmal_connection_destroy(previewConnection);
+    previewConnection = nullptr;
+    MMAL_PORT_T* camera_still_port = cameraComponent->output[MMAL_CAMERA_CAPTURE_PORT];
+    if(verbose)
+        qDebug() << QString("Disabling camera still output port");
+    // Disable the camera still output port and tell it its callback function
+    checkDisablePort(camera_still_port);
 }
 
 
-/*
-            if (state.common_settings.verbose)
-                fprintf(stderr, "Starting video preview\n");
- */
+void
+PiCamera::capture() {
+    FILE *output_file = fopen("temp.jpg", "wb");
+    if (!output_file) {
+        // Notify user, carry on but discarding encoded output buffers
+        qDebug() << QString("%1: Error opening output file: %2\nNo output file will be generated")
+                    .arg(__func__)
+                    .arg("temp.jpg");
+    }
+
+    callbackData.file_handle = output_file;
+    MMAL_PORT_T* cameraStillPort = cameraComponent->output[MMAL_CAMERA_CAPTURE_PORT];
+// Send all the buffers to the camera output port
+    uint num = mmal_queue_length(pool->queue);
+    for(uint q=0; q<num; q++) {
+        MMAL_BUFFER_HEADER_T *buffer = mmal_queue_get(pool->queue);
+        if(!buffer)
+            qDebug() << QString("Unable to get a required buffer %1 from pool queue").arg(q);
+        if(mmal_port_send_buffer(cameraStillPort, buffer)!= MMAL_SUCCESS)
+            qDebug() << QString("Unable to send a buffer to camera output port (%1)").arg(q);
+    }
+    if (verbose)
+        qDebug() << QString("Starting capture...");
+    checkDisablePort(cameraStillPort);
+    if (mmal_port_parameter_set_boolean(cameraStillPort, MMAL_PARAMETER_CAPTURE, 1) != MMAL_SUCCESS) {
+        qDebug() << QString("%1: Failed to start capture").arg(__func__);
+    }
+    else {
+        // Wait for capture to complete
+        // For some reason using vcos_semaphore_wait_timeout sometimes returns immediately with bad parameter error
+        // even though it appears to be all correct, so reverting to untimed one until figure out why its erratic
+        vcos_semaphore_wait(&callbackData.complete_semaphore);
+        if(verbose)
+            qDebug() << QString("Finished capture1");
+    }
+    fflush(output_file);
+}

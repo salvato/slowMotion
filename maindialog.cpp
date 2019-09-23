@@ -429,7 +429,7 @@ void
 MainDialog::onTimeToGetNewImage() {
     switchLampOn();
     QThread::msleep(10);
-
+    pCamera->capture();
 // TODO:
     QThread::msleep(300);
     switchLampOff();
