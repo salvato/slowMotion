@@ -39,7 +39,7 @@
 #define ANNOTATE_BLACK_BACKGROUND   1024
 
 
-typedef struct mmal_param_thumbnail_config_s {
+typedef struct {
     int enable;
     int width,height;
     int quality;
@@ -54,13 +54,13 @@ typedef enum {
 
 
 // There isn't actually a MMAL structure for the following, so make one
-typedef struct mmal_param_colourfx_s {
+typedef struct {
     int enable;       /// Turn colourFX on or off
     int u,v;          /// U and V to use
 } MMAL_PARAM_COLOURFX_T;
 
 
-typedef struct param_float_rect_s {
+typedef struct {
     double x;
     double y;
     double w;
