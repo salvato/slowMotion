@@ -147,20 +147,20 @@ public:
     int set_stereo_mode(MMAL_PORT_T *port, MMAL_PARAMETER_STEREOSCOPIC_MODE_T *stereo_mode);
 
 //Individual getting functions (NOT YET IMPLEMENTED)
-    int get_saturation(MMAL_COMPONENT_T *camera);
-    int get_sharpness(MMAL_COMPONENT_T *camera);
-    int get_contrast(MMAL_COMPONENT_T *camera);
-    int get_brightness(MMAL_COMPONENT_T *camera);
-    int get_ISO(MMAL_COMPONENT_T *camera);
-    int get_video_stabilisation(MMAL_COMPONENT_T *camera);
-    int get_exposure_compensation(MMAL_COMPONENT_T *camera);
-    MMAL_PARAM_EXPOSUREMETERINGMODE_T get_metering_mode(MMAL_COMPONENT_T *camera);
-    MMAL_PARAM_THUMBNAIL_CONFIG_T     get_thumbnail_parameters(MMAL_COMPONENT_T *camera);
-    MMAL_PARAM_EXPOSUREMODE_T         get_exposure_mode(MMAL_COMPONENT_T *camera);
-    MMAL_PARAM_FLICKERAVOID_T         get_flicker_avoid_mode(MMAL_COMPONENT_T *camera);
-    MMAL_PARAM_AWBMODE_T              get_awb_mode(MMAL_COMPONENT_T *camera);
-    MMAL_PARAM_IMAGEFX_T              get_imageFX(MMAL_COMPONENT_T *camera);
-    MMAL_PARAM_COLOURFX_T             get_colourFX(MMAL_COMPONENT_T *camera);
+//    int get_saturation(MMAL_COMPONENT_T *camera);
+//    int get_sharpness(MMAL_COMPONENT_T *camera);
+//    int get_contrast(MMAL_COMPONENT_T *camera);
+//    int get_brightness(MMAL_COMPONENT_T *camera);
+//    int get_ISO(MMAL_COMPONENT_T *camera);
+//    int get_video_stabilisation(MMAL_COMPONENT_T *camera);
+//    int get_exposure_compensation(MMAL_COMPONENT_T *camera);
+//    MMAL_PARAM_EXPOSUREMETERINGMODE_T get_metering_mode(MMAL_COMPONENT_T *camera);
+//    MMAL_PARAM_THUMBNAIL_CONFIG_T     get_thumbnail_parameters(MMAL_COMPONENT_T *camera);
+//    MMAL_PARAM_EXPOSUREMODE_T         get_exposure_mode(MMAL_COMPONENT_T *camera);
+//    MMAL_PARAM_FLICKERAVOID_T         get_flicker_avoid_mode(MMAL_COMPONENT_T *camera);
+//    MMAL_PARAM_AWBMODE_T              get_awb_mode(MMAL_COMPONENT_T *camera);
+//    MMAL_PARAM_IMAGEFX_T              get_imageFX(MMAL_COMPONENT_T *camera);
+//    MMAL_PARAM_COLOURFX_T             get_colourFX(MMAL_COMPONENT_T *camera);
 
 protected:
     void set_defaults();

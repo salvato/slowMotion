@@ -23,6 +23,19 @@
 
 
 
+//struct {
+//   const char *format;
+//   MMAL_FOURCC_T encoding;
+//} encoding_xref[] = {
+//   {"jpg", MMAL_ENCODING_JPEG},
+//   {"bmp", MMAL_ENCODING_BMP},
+//   {"gif", MMAL_ENCODING_GIF},
+//   {"png", MMAL_ENCODING_PNG},
+//   {"ppm", MMAL_ENCODING_PPM},
+//   {"tga", MMAL_ENCODING_TGA}
+//};
+
+
 class PiCamera
 {
 public:
@@ -48,6 +61,7 @@ public:
     MMAL_COMPONENT_T *cameraComponent;// The Camera Component
     CameraControl cameraControl;
     MMAL_POOL_T *pool;
+    MMAL_FOURCC_T encoding = MMAL_ENCODING_JPEG;
 
 protected:
     MMAL_STATUS_T connectPorts(MMAL_PORT_T *output_port, MMAL_PORT_T *input_port, MMAL_CONNECTION_T **connection);

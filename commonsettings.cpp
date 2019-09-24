@@ -11,7 +11,7 @@ CommonSettings::CommonSettings() {
     filename    = nullptr;
     verbose     = 0;
     cameraNum   = 0;
-    sensor_mode = 0;
+    sensor_mode = 3;
     gps         = 0;
 }
 

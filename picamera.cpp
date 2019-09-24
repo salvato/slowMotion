@@ -657,3 +657,144 @@ PiCamera::capture(QString sPathName) {
     }
     fflush(output_file);
 }
+
+
+// *
+// * Create the encoder component, set up its ports
+// *
+// * @param state Pointer to state control struct. encoder_component member set to the created camera_component if successful.
+// *
+// * @return a MMAL_STATUS, MMAL_SUCCESS if all OK, something else otherwise
+
+//static
+//MMAL_STATUS_T create_encoder_component(RASPISTILL_STATE *state) {
+//   MMAL_COMPONENT_T *encoder = nullptr;
+//   MMAL_PORT_T *encoder_input = nullptr;
+//   MMAL_PORT_T *encoder_output = nullptr;
+//   MMAL_STATUS_T status;
+//   MMAL_POOL_T *pool;
+
+//   status = mmal_component_create(MMAL_COMPONENT_DEFAULT_IMAGE_ENCODER, &encoder);
+
+//   if (status != MMAL_SUCCESS) {
+//      vcos_log_error("Unable to create JPEG encoder component");
+//      goto error;
+//   }
+
+//   if (!encoder->input_num || !encoder->output_num) {
+//      status = MMAL_ENOSYS;
+//      vcos_log_error("JPEG encoder doesn't have input/output ports");
+//      goto error;
+//   }
+
+//   encoder_input = encoder->input[0];
+//   encoder_output = encoder->output[0];
+
+//   // We want same format on input and output
+//   mmal_format_copy(encoder_output->format, encoder_input->format);
+
+//   // Specify out output format
+//   encoder_output->format->encoding = state->encoding;
+
+//   encoder_output->buffer_size = encoder_output->buffer_size_recommended;
+
+//   if (encoder_output->buffer_size < encoder_output->buffer_size_min)
+//      encoder_output->buffer_size = encoder_output->buffer_size_min;
+
+//   encoder_output->buffer_num = encoder_output->buffer_num_recommended;
+
+//   if (encoder_output->buffer_num < encoder_output->buffer_num_min)
+//      encoder_output->buffer_num = encoder_output->buffer_num_min;
+
+//   // Commit the port changes to the output port
+//   status = mmal_port_format_commit(encoder_output);
+
+//   if (status != MMAL_SUCCESS) {
+//      vcos_log_error("Unable to set format on video encoder output port");
+//      goto error;
+//   }
+
+//   // Set the JPEG quality level
+//   status = mmal_port_parameter_set_uint32(encoder_output, MMAL_PARAMETER_JPEG_Q_FACTOR, state->quality);
+
+//   if (status != MMAL_SUCCESS) {
+//      vcos_log_error("Unable to set JPEG quality");
+//      goto error;
+//   }
+
+//   // Set the JPEG restart interval
+//   status = mmal_port_parameter_set_uint32(encoder_output, MMAL_PARAMETER_JPEG_RESTART_INTERVAL, state->restart_interval);
+
+//   if (state->restart_interval && status != MMAL_SUCCESS) {
+//      vcos_log_error("Unable to set JPEG restart interval");
+//      goto error;
+//   }
+
+//   // Set up any required thumbnail
+//   {
+//      MMAL_PARAMETER_THUMBNAIL_CONFIG_T param_thumb = {{MMAL_PARAMETER_THUMBNAIL_CONFIGURATION, sizeof(MMAL_PARAMETER_THUMBNAIL_CONFIG_T)}, 0, 0, 0, 0};
+
+//      if(state->thumbnailConfig.enable &&
+//         state->thumbnailConfig.width > 0 &&
+//         state->thumbnailConfig.height > 0)
+//      {
+//         // Have a valid thumbnail defined
+//         param_thumb.enable = 1;
+//         param_thumb.width = state->thumbnailConfig.width;
+//         param_thumb.height = state->thumbnailConfig.height;
+//         param_thumb.quality = state->thumbnailConfig.quality;
+//      }
+//      status = mmal_port_parameter_set(encoder->control, &param_thumb.hdr);
+//   }
+
+//   //  Enable component
+//   status = mmal_component_enable(encoder);
+
+//   if (status  != MMAL_SUCCESS) {
+//      vcos_log_error("Unable to enable video encoder component");
+//      goto error;
+//   }
+
+//   /* Create pool of buffer headers for the output port to consume */
+//   pool = mmal_port_pool_create(encoder_output, encoder_output->buffer_num, encoder_output->buffer_size);
+
+//   if (!pool) {
+//      vcos_log_error("Failed to create buffer header pool for encoder output port %s", encoder_output->name);
+//   }
+
+//   state->encoder_pool = pool;
+//   state->encoder_component = encoder;
+
+//   if (state->common_settings.verbose)
+//      fprintf(stderr, "Encoder component done\n");
+
+//   return status;
+
+//error:
+
+//   if (encoder)
+//      mmal_component_destroy(encoder);
+
+//   return status;
+//}
+
+
+// *
+// * Destroy the encoder component
+// *
+// * @param state Pointer to state control struct
+// *
+
+//static void
+//destroy_encoder_component(RASPISTILL_STATE *state) {
+//   // Get rid of any port buffers first
+//   if (state->encoder_pool) {
+//      mmal_port_pool_destroy(state->encoder_component->output[0], state->encoder_pool);
+//   }
+
+//   if (state->encoder_component) {
+//      mmal_component_destroy(state->encoder_component);
+//      state->encoder_component = NULL;
+//   }
+//}
+
