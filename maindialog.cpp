@@ -31,6 +31,12 @@ MainDialog::MainDialog(QWidget *parent)
     , pUi(new Ui::MainDialog)
     , gpioLEDpin(LED_PIN)
     , gpioHostHandle(-1)
+    , width(0)
+    , height(0)
+    , filename(nullptr)
+    , cameraNum(0)
+    , sensorMode(3)
+    , gps(0)
 {
     MMAL_STATUS_T status;
 
@@ -66,18 +72,14 @@ MainDialog::MainDialog(QWidget *parent)
             SLOT(onTimeToGetNewImage()));
 
     getSensorDefaults(cameraNum,
-                      camera_name,
+                      cameraName,
                       &width,
                       &height);
     dumpParameters();
 
-    pCamera        = new PiCamera();
-    pPreview       = new Preview();// Setup preview window defaults
-    pCameraControl = new CameraControl();// Set up the camera_parameters to default
-
-    pCamera->createComponent(cameraNum,
-                             sensor_mode);
-    pPreview->createComponent();
+    pCamera        = new PiCamera(cameraNum, sensorMode);
+    pPreview       = new Preview(videoSize.width(), videoSize.height());// Setup preview window defaults
+    pCameraControl = new CameraControl(pCamera->component);// Set up the camera_parameters to default
 
     // set up the camera configuration
     MMAL_PARAMETER_CAMERA_CONFIG_T camConfig;
@@ -121,7 +123,7 @@ MainDialog::MainDialog(QWidget *parent)
         exit(EXIT_FAILURE);
     }
     pCamera->createBufferPool();
-    pCameraControl->set_flips(pCamera->cameraComponent, 0, 1);
+    pCamera->pControl->set_flips(0, 1);
 }
 
 
@@ -207,14 +209,14 @@ MainDialog::dumpParameters() {
     qDebug() << "Camera Parameters Dump:";
     qDebug() << endl;
     qDebug() << QString("Camera Name %1")
-                .arg(camera_name);
+                .arg(cameraName);
     qDebug() << QString("Width %1, Height %2, filename %3")
                 .arg(width)
                 .arg(height)
                 .arg(filename);
     qDebug() << QString("Using camera %1, sensor mode %2")
                 .arg(cameraNum)
-                .arg(sensor_mode);
+                .arg(sensorMode);
     qDebug() << QString("GPS output %1")
                 .arg(gps ? "Enabled" : "Disabled");
     qDebug() << endl;
@@ -294,21 +296,21 @@ MainDialog::checkValues() {
 
 void
 MainDialog::getSensorDefaults(int camera_num, char *camera_name, int *width, int *height) {
-   MMAL_COMPONENT_T *camera_info;
+   MMAL_COMPONENT_T *cameraInfo;
    MMAL_STATUS_T status;
    // Default to the OV5647 setup
    strncpy(camera_name, "OV5647", MMAL_PARAMETER_CAMERA_INFO_MAX_STR_LEN);
    // Try to get the camera name and maximum supported resolution
-   status = mmal_component_create(MMAL_COMPONENT_DEFAULT_CAMERA_INFO, &camera_info);
+   status = mmal_component_create(MMAL_COMPONENT_DEFAULT_CAMERA_INFO, &cameraInfo);
    if(status == MMAL_SUCCESS) {
       MMAL_PARAMETER_CAMERA_INFO_T param;
       param.hdr.id = MMAL_PARAMETER_CAMERA_INFO;
       param.hdr.size = sizeof(param)-4;  // Deliberately undersize to check firmware version
-      status = mmal_port_parameter_get(camera_info->control, &param.hdr);
+      status = mmal_port_parameter_get(cameraInfo->control, &param.hdr);
 
       if(status != MMAL_SUCCESS) {// Running on newer firmware
          param.hdr.size = sizeof(param);
-         status = mmal_port_parameter_get(camera_info->control, &param.hdr);
+         status = mmal_port_parameter_get(cameraInfo->control, &param.hdr);
          if(status == MMAL_SUCCESS && param.num_cameras > uint32_t(camera_num)) {
             // Take the parameters from the first camera listed.
             if(*width == 0)
@@ -325,7 +327,7 @@ MainDialog::getSensorDefaults(int camera_num, char *camera_name, int *width, int
          // Older firmware
          // Nothing to do here, keep the defaults for OV5647
       }
-      mmal_component_destroy(camera_info);
+      mmal_component_destroy(cameraInfo);
    }
    else {
       qDebug() << QString("Failed to create camera_info component");

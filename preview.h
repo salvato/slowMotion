@@ -13,15 +13,15 @@
 class Preview
 {
 public:
-    Preview();
+    Preview(int width, int height);
 
 public:
-    MMAL_STATUS_T createComponent();
     void destroy();
     void dump_parameters();
     MMAL_STATUS_T setScreenPos(MMAL_RECT_T previewWindow);
 
 protected:
+    MMAL_STATUS_T createComponent();
 
 public:
     /// Layer that preview window should be displayed on

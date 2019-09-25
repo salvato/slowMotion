@@ -104,11 +104,11 @@ private:
     QPoint videoPos;
     QSize videoSize;
 
-    char camera_name[MMAL_PARAMETER_CAMERA_INFO_MAX_STR_LEN]; /// Name of the camera sensor
+    char cameraName[MMAL_PARAMETER_CAMERA_INFO_MAX_STR_LEN]; /// Name of the camera sensor
     int width;       /// Requested width of image
     int height;      /// requested height of image
     char *filename;  /// filename of output file
     int cameraNum;   /// Camera number
-    int sensor_mode; /// Sensor mode. 0=auto. Check docs/forum for modes selected by other values.
+    int sensorMode; /// Sensor mode. 0=auto. Check docs/forum for modes selected by other values.
     int gps;         /// Add real-time gpsd output to output
 };

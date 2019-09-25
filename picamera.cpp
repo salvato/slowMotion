@@ -1,4 +1,5 @@
 #include "picamera.h"
+#include "utility.h"
 #include "bcm_host.h"
 #include <QDebug>
 
@@ -73,7 +74,7 @@ cameraBufferCallback(MMAL_PORT_T *port, MMAL_BUFFER_HEADER_T *buffer) {
     if(pData) {
         uint bytes_written = 0;
         uint bytes_to_write = buffer->length;
-        if(pData->pCamera->cameraControl.onlyLuma)
+        if(pData->pCamera->pControl->onlyLuma)
             bytes_to_write = vcos_min(buffer->length, port->format->es->video.width * port->format->es->video.height);
         if(bytes_to_write && pData->file_handle) {
             mmal_buffer_header_mem_lock(buffer);
@@ -114,11 +115,14 @@ cameraBufferCallback(MMAL_PORT_T *port, MMAL_BUFFER_HEADER_T *buffer) {
 }
 
 
-PiCamera::PiCamera()
-    : cameraComponent(nullptr)
+PiCamera::PiCamera(int cameraNum, int sensorMode)
+    : component(nullptr)
     , pool(nullptr)
     , previewConnection(nullptr)
 {
+    if(createComponent(cameraNum, sensorMode) != MMAL_SUCCESS)
+        exit(EXIT_FAILURE);
+    pControl = new CameraControl(component);
     VCOS_STATUS_T vcos_status;
     vcos_status = vcos_semaphore_create(&callbackData.complete_semaphore, "RaspiStill-sem", 0);
     vcos_assert(vcos_status == VCOS_SUCCESS);
@@ -129,12 +133,12 @@ MMAL_STATUS_T
 PiCamera::createComponent(int cameraNum, int sensorMode) {
     MMAL_STATUS_T status;
     // Create the component
-    status = mmal_component_create(MMAL_COMPONENT_DEFAULT_CAMERA, &cameraComponent);
+    status = mmal_component_create(MMAL_COMPONENT_DEFAULT_CAMERA, &component);
     if(status != MMAL_SUCCESS) {
         qDebug() << QString("Failed to create camera component");
-        if(cameraComponent) {
-            mmal_component_destroy(cameraComponent);
-            cameraComponent = nullptr;
+        if(component) {
+            mmal_component_destroy(component);
+            component = nullptr;
         }
         return status;
     }
@@ -142,32 +146,32 @@ PiCamera::createComponent(int cameraNum, int sensorMode) {
                                             {MMAL_PARAMETER_CAMERA_NUM, sizeof(camera_num)},
                                             cameraNum
                                         };
-    status = mmal_port_parameter_set(cameraComponent->control, &camera_num.hdr);
+    status = mmal_port_parameter_set(component->control, &camera_num.hdr);
     if(status != MMAL_SUCCESS) {
         qDebug() << QString("Could not select camera : error %1").arg(status);
-        if(cameraComponent) {
-            mmal_component_destroy(cameraComponent);
-            cameraComponent = nullptr;
+        if(component) {
+            mmal_component_destroy(component);
+            component = nullptr;
         }
         return status;
     }
-    if(!cameraComponent->output_num) {
+    if(!component->output_num) {
         status = MMAL_ENOSYS;
         qDebug() << QString("Camera doesn't have output ports");
-        if(cameraComponent) {
-            mmal_component_destroy(cameraComponent);
-            cameraComponent = nullptr;
+        if(component) {
+            mmal_component_destroy(component);
+            component = nullptr;
         }
         return status;
     }
-    status = mmal_port_parameter_set_uint32(cameraComponent->control,
+    status = mmal_port_parameter_set_uint32(component->control,
                                             MMAL_PARAMETER_CAMERA_CUSTOM_SENSOR_CONFIG,
                                             uint32_t(sensorMode));
     if(status != MMAL_SUCCESS) {
         qDebug() << QString("Could not set sensor mode : error %1").arg(status);
-        if(cameraComponent) {
-            mmal_component_destroy(cameraComponent);
-            cameraComponent = nullptr;
+        if(component) {
+            mmal_component_destroy(component);
+            component = nullptr;
         }
     }
     return status;
@@ -181,13 +185,13 @@ PiCamera::~PiCamera() {
 
 void
 PiCamera::destroyComponent() {
-    if(cameraComponent) {
-        MMAL_PORT_T *still_port = cameraComponent->output[MMAL_CAMERA_CAPTURE_PORT];
+    if(component) {
+        MMAL_PORT_T *still_port = component->output[MMAL_CAMERA_CAPTURE_PORT];
         if(pool)
             mmal_port_pool_destroy(still_port, pool);
-        mmal_component_destroy(cameraComponent);
+        mmal_component_destroy(component);
     }
-    cameraComponent = nullptr;
+    component = nullptr;
     pool = nullptr;
 }
 
@@ -196,7 +200,7 @@ MMAL_STATUS_T
 PiCamera::setCallback() {
     MMAL_STATUS_T status;
     // Enable the camera, and tell it its control callback function
-    status = mmal_port_enable(cameraComponent->control, default_camera_control_callback);
+    status = mmal_port_enable(component->control, default_camera_control_callback);
     if(status != MMAL_SUCCESS ){
         qDebug() << QString("Unable to enable control port : error %1").arg(status);
         destroyComponent();
@@ -208,7 +212,7 @@ PiCamera::setCallback() {
 MMAL_STATUS_T
 PiCamera::setConfig(MMAL_PARAMETER_CAMERA_CONFIG_T* pCam_config) {
     MMAL_STATUS_T status;
-    status = mmal_port_parameter_set(cameraComponent->control, &pCam_config->hdr);
+    status = mmal_port_parameter_set(component->control, &pCam_config->hdr);
     return status;
 }
 
@@ -221,41 +225,41 @@ PiCamera::setConfig(MMAL_PARAMETER_CAMERA_CONFIG_T* pCam_config) {
 int
 PiCamera::setAllParameters() {
     int result;
-    result  = cameraControl.set_saturation(cameraComponent, cameraControl.saturation);
-    result += cameraControl.set_sharpness(cameraComponent, cameraControl.sharpness);
-    result += cameraControl.set_contrast(cameraComponent, cameraControl.contrast);
-    result += cameraControl.set_brightness(cameraComponent, cameraControl.brightness);
-    result += cameraControl.set_ISO(cameraComponent, cameraControl.ISO);
-    result += cameraControl.set_video_stabilisation(cameraComponent, cameraControl.videoStabilisation);
-    result += cameraControl.set_exposure_compensation(cameraComponent, cameraControl.exposureCompensation);
-    result += cameraControl.set_exposure_mode(cameraComponent, cameraControl.exposureMode);
-    result += cameraControl.set_flicker_avoid_mode(cameraComponent, cameraControl.flickerAvoidMode);
-    result += cameraControl.set_metering_mode(cameraComponent, cameraControl.exposureMeterMode);
-    result += cameraControl.set_awb_mode(cameraComponent, cameraControl.awbMode);
-    result += cameraControl.set_awb_gains(cameraComponent, cameraControl.awb_gains_r, cameraControl.awb_gains_b);
-    result += cameraControl.set_imageFX(cameraComponent, cameraControl.imageEffect);
-    result += cameraControl.set_colourFX(cameraComponent, &cameraControl.colourEffects);
-    //result += cameraControl.set_thumbnail_parameters(cameraComponent, &cameraControl.thumbnailConfig);  TODO Not working for some reason
-    result += cameraControl.set_rotation(cameraComponent, cameraControl.rotation);
-    result += cameraControl.set_flips(cameraComponent, cameraControl.hflip, cameraControl.vflip);
-    result += cameraControl.set_ROI(cameraComponent, cameraControl.roi);
-    result += cameraControl.set_shutter_speed(cameraComponent, cameraControl.shutter_speed);
-    result += cameraControl.set_DRC(cameraComponent, cameraControl.drc_level);
-    result += cameraControl.set_stats_pass(cameraComponent, cameraControl.stats_pass);
-    result += cameraControl.set_annotate(cameraComponent, cameraControl.enable_annotate, cameraControl.annotate_string,
-                                         cameraControl.annotate_text_size,
-                                         cameraControl.annotate_text_colour,
-                                         cameraControl.annotate_bg_colour,
-                                         cameraControl.annotate_justify,
-                                         cameraControl.annotate_x,
-                                         cameraControl.annotate_y);
-    result += cameraControl.set_gains(cameraComponent, cameraControl.analog_gain, cameraControl.digital_gain);
-    if(cameraControl.settings) {
+    result  = pControl->set_saturation(pControl->saturation);
+    result += pControl->set_sharpness(pControl->sharpness);
+    result += pControl->set_contrast(pControl->contrast);
+    result += pControl->set_brightness(pControl->brightness);
+    result += pControl->set_ISO(pControl->ISO);
+    result += pControl->set_video_stabilisation(pControl->videoStabilisation);
+    result += pControl->set_exposure_compensation(pControl->exposureCompensation);
+    result += pControl->set_exposure_mode(pControl->exposureMode);
+    result += pControl->set_flicker_avoid_mode(pControl->flickerAvoidMode);
+    result += pControl->set_metering_mode(pControl->exposureMeterMode);
+    result += pControl->set_awb_mode(pControl->awbMode);
+    result += pControl->set_awb_gains(pControl->awb_gains_r, pControl->awb_gains_b);
+    result += pControl->set_imageFX(pControl->imageEffect);
+    result += pControl->set_colourFX(&pControl->colourEffects);
+    //result += pControl->set_thumbnail_parameters(&pControl->thumbnailConfig);  TODO Not working for some reason
+    result += pControl->set_rotation(pControl->rotation);
+    result += pControl->set_flips(pControl->hflip, pControl->vflip);
+    result += pControl->set_ROI(pControl->roi);
+    result += pControl->set_shutter_speed(pControl->shutter_speed);
+    result += pControl->set_DRC(pControl->drc_level);
+    result += pControl->set_stats_pass(pControl->stats_pass);
+    result += pControl->set_annotate(pControl->enable_annotate, pControl->annotate_string,
+                                         pControl->annotate_text_size,
+                                         pControl->annotate_text_colour,
+                                         pControl->annotate_bg_colour,
+                                         pControl->annotate_justify,
+                                         pControl->annotate_x,
+                                         pControl->annotate_y);
+    result += pControl->set_gains(pControl->analog_gain, pControl->digital_gain);
+    if(pControl->settings) {
         MMAL_PARAMETER_CHANGE_EVENT_REQUEST_T change_event_request = {
             {MMAL_PARAMETER_CHANGE_EVENT_REQUEST, sizeof(MMAL_PARAMETER_CHANGE_EVENT_REQUEST_T)},
             MMAL_PARAMETER_CAMERA_SETTINGS, 1
         };
-        MMAL_STATUS_T status = mmal_port_parameter_set(cameraComponent->control, &change_event_request.hdr);
+        MMAL_STATUS_T status = mmal_port_parameter_set(component->control, &change_event_request.hdr);
         if(status != MMAL_SUCCESS) {
             qDebug() << QString("No camera settings events");
         }
@@ -273,23 +277,23 @@ PiCamera::setPortFormats(bool fullResPreview,
 {
     // Utility variables
     MMAL_STATUS_T status;
-    MMAL_PORT_T *previewPort = cameraComponent->output[MMAL_CAMERA_PREVIEW_PORT];
-    MMAL_PORT_T *videoPort   = cameraComponent->output[MMAL_CAMERA_VIDEO_PORT];
-    MMAL_PORT_T *stillPort   = cameraComponent->output[MMAL_CAMERA_CAPTURE_PORT];
+    MMAL_PORT_T *previewPort = component->output[MMAL_CAMERA_PREVIEW_PORT];
+    MMAL_PORT_T *videoPort   = component->output[MMAL_CAMERA_VIDEO_PORT];
+    MMAL_PORT_T *stillPort   = component->output[MMAL_CAMERA_CAPTURE_PORT];
     MMAL_ES_FORMAT_T *format;
 
 // Set up the port formats starting from the Preview Port
     format = previewPort->format;
     format->encoding = MMAL_ENCODING_OPAQUE;
     format->encoding_variant = MMAL_ENCODING_I420;
-    if(cameraControl.shutter_speed > 6000000) {
+    if(pControl->shutter_speed > 6000000) {
         MMAL_PARAMETER_FPS_RANGE_T fps_range = {{MMAL_PARAMETER_FPS_RANGE, sizeof(fps_range)},
                                                 { 50, 1000 },
                                                 {166, 1000}
                                                };
         mmal_port_parameter_set(previewPort, &fps_range.hdr);
     }
-    else if(cameraControl.shutter_speed > 1000000) {
+    else if(pControl->shutter_speed > 1000000) {
         MMAL_PARAMETER_FPS_RANGE_T fps_range = {{MMAL_PARAMETER_FPS_RANGE, sizeof(fps_range)},
                                                 { 166, 1000 },
                                                 {999, 1000}
@@ -313,7 +317,7 @@ PiCamera::setPortFormats(bool fullResPreview,
     status = mmal_port_format_commit(previewPort);
     if(status != MMAL_SUCCESS ) {
         qDebug() << QString("camera viewfinder format couldn't be set");
-        mmal_component_destroy(cameraComponent);
+        mmal_component_destroy(component);
         return status;
     }
 
@@ -322,7 +326,7 @@ PiCamera::setPortFormats(bool fullResPreview,
     status = mmal_port_format_commit(videoPort);
     if(status != MMAL_SUCCESS ) {
         qDebug() << QString("camera video format couldn't be set");
-        mmal_component_destroy(cameraComponent);
+        mmal_component_destroy(component);
         return status;
     }
 // Ensure there are enough buffers to avoid dropping frames
@@ -331,13 +335,13 @@ PiCamera::setPortFormats(bool fullResPreview,
 
 // Now set up the Still Port
     format = stillPort->format;
-    if(cameraControl.shutter_speed > 6000000) {
+    if(pControl->shutter_speed > 6000000) {
         MMAL_PARAMETER_FPS_RANGE_T fps_range = {{MMAL_PARAMETER_FPS_RANGE, sizeof(fps_range)},
                                                 { 50, 1000 }, {166, 1000}
                                                };
         mmal_port_parameter_set(stillPort, &fps_range.hdr);
     }
-    else if(cameraControl.shutter_speed > 1000000) {
+    else if(pControl->shutter_speed > 1000000) {
         MMAL_PARAMETER_FPS_RANGE_T fps_range = {{MMAL_PARAMETER_FPS_RANGE, sizeof(fps_range)},
                                                 { 167, 1000 },
                                                 {999, 1000}
@@ -373,13 +377,13 @@ PiCamera::setPortFormats(bool fullResPreview,
     status = mmal_port_parameter_set_boolean(videoPort, MMAL_PARAMETER_ZERO_COPY, MMAL_TRUE);
     if(status != MMAL_SUCCESS) {
         qDebug() << QString("Failed to select zero copy");
-        mmal_component_destroy(cameraComponent);
+        mmal_component_destroy(component);
         return status;
     }
     status = mmal_port_format_commit(stillPort);
     if(status != MMAL_SUCCESS ) {
         qDebug() << QString("camera still format couldn't be set");
-        mmal_component_destroy(cameraComponent);
+        mmal_component_destroy(component);
         return status;
     }
 
@@ -390,10 +394,10 @@ PiCamera::setPortFormats(bool fullResPreview,
 MMAL_STATUS_T
 PiCamera::enableCamera() {
     // Enable component
-    MMAL_STATUS_T status = mmal_component_enable(cameraComponent);
+    MMAL_STATUS_T status = mmal_component_enable(component);
     if(status != MMAL_SUCCESS ) {
         qDebug() << QString("camera component couldn't be enabled");
-        mmal_component_destroy(cameraComponent);
+        mmal_component_destroy(component);
     }
     return status;
 }
@@ -403,7 +407,7 @@ void
 PiCamera::createBufferPool() {
     // Create pool of buffer headers for the output port to consume
     // Utility variables
-    MMAL_PORT_T *still_port = cameraComponent->output[MMAL_CAMERA_CAPTURE_PORT];
+    MMAL_PORT_T *still_port = component->output[MMAL_CAMERA_CAPTURE_PORT];
     qDebug() << "still_port buffer size  :" << still_port->buffer_size;
     qDebug() << "still_port buffer number:" << still_port->buffer_num;
     pool = mmal_port_pool_create(still_port, still_port->buffer_num, still_port->buffer_size);
@@ -422,16 +426,16 @@ PiCamera::start(Preview *pPreview) {
 // input port so we can simple do this without conditionals
     MMAL_STATUS_T status;
     MMAL_PORT_T *preview_input_port  = pPreview->previewComponent->input[0];
-    MMAL_PORT_T *previewPort = cameraComponent->output[MMAL_CAMERA_PREVIEW_PORT];
+    MMAL_PORT_T *previewPort = component->output[MMAL_CAMERA_PREVIEW_PORT];
 // Connect camera to preview (which might be a null_sink if no preview required)
     status = connectPorts(previewPort, preview_input_port, &previewConnection);
     if(status != MMAL_SUCCESS) {
-        cameraControl.mmal_status_to_int(status);
+        mmal_status_to_int(status);
         qDebug() << QString("%1: Failed to connect camera to preview").arg(__func__);
         handleError(status, pPreview);
         return status;
     }
-    MMAL_PORT_T* camera_still_port   = cameraComponent->output[MMAL_CAMERA_CAPTURE_PORT];
+    MMAL_PORT_T* camera_still_port   = component->output[MMAL_CAMERA_CAPTURE_PORT];
     // Set up our userdata:
     // this is passed through to the callback where we need the information.
     callbackData.file_handle = nullptr;    // Null until we open our filename
@@ -572,26 +576,26 @@ PiCamera::connectPorts(MMAL_PORT_T *output_port, MMAL_PORT_T *input_port, MMAL_C
 
 void
 PiCamera::handleError(MMAL_STATUS_T status, Preview *pPreview) {
-    cameraControl.mmal_status_to_int(status);
+    mmal_status_to_int(status);
     if(verbose)
         qDebug() << "Closing down";
     // Disable all our ports that are not handled by connections
-    MMAL_PORT_T *camera_video_port = cameraComponent->output[MMAL_CAMERA_VIDEO_PORT];
+    MMAL_PORT_T *camera_video_port = component->output[MMAL_CAMERA_VIDEO_PORT];
     checkDisablePort(camera_video_port);
-    MMAL_PORT_T* cameraStillPort = cameraComponent->output[MMAL_CAMERA_CAPTURE_PORT];
+    MMAL_PORT_T* cameraStillPort = component->output[MMAL_CAMERA_CAPTURE_PORT];
     checkDisablePort(cameraStillPort);
     if(previewConnection)
         mmal_connection_destroy(previewConnection);
     // Disable components
     if(pPreview->previewComponent)
         mmal_component_disable(pPreview->previewComponent);
-    if(cameraComponent)
-        mmal_component_disable(cameraComponent);
+    if(component)
+        mmal_component_disable(component);
     pPreview->destroy();
     destroyComponent();
     if(verbose)
         qDebug() << "Close down completed, all components disconnected, disabled and destroyed";
-    cameraControl.checkConfiguration(128);
+    checkConfiguration(128);
 }
 
 
@@ -606,12 +610,12 @@ PiCamera::checkDisablePort(MMAL_PORT_T *port) {
 
 void
 PiCamera::stop() {
-MMAL_PORT_T *camera_video_port = cameraComponent->output[MMAL_CAMERA_VIDEO_PORT];
+MMAL_PORT_T *camera_video_port = component->output[MMAL_CAMERA_VIDEO_PORT];
     checkDisablePort(camera_video_port);
     if(previewConnection)
         mmal_connection_destroy(previewConnection);
     previewConnection = nullptr;
-    MMAL_PORT_T* camera_still_port = cameraComponent->output[MMAL_CAMERA_CAPTURE_PORT];
+    MMAL_PORT_T* camera_still_port = component->output[MMAL_CAMERA_CAPTURE_PORT];
     if(verbose)
         qDebug() << QString("Disabling camera still output port");
     // Disable the camera still output port
@@ -632,7 +636,7 @@ PiCamera::capture(QString sPathName) {
         qDebug() << "Writing" << sPathName;
     }
     callbackData.file_handle = output_file;
-    MMAL_PORT_T* cameraStillPort = cameraComponent->output[MMAL_CAMERA_CAPTURE_PORT];
+    MMAL_PORT_T* cameraStillPort = component->output[MMAL_CAMERA_CAPTURE_PORT];
 // Send all the buffers to the camera output port
     uint num = mmal_queue_length(pool->queue);
     for(uint q=0; q<num; q++) {

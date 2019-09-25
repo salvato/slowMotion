@@ -2,15 +2,16 @@
 #include "QDebug"
 
 
-Preview::Preview() {
-    wantPreview           = 1;
-    wantFullScreenPreview = 0;
-    opacity               = 255;
-    previewWindow.x       = 0;
-    previewWindow.y       = 0;
-    previewWindow.width   = 320;
-    previewWindow.height  = 240;
-    previewComponent     = nullptr;
+Preview::Preview(int width, int height)
+    : wantPreview(1)
+    , wantFullScreenPreview(0)
+    , opacity(255)
+    , previewWindow(MMAL_RECT_T{0, 0, width, height})
+    , previewComponent(nullptr)
+
+{
+    if(createComponent() != MMAL_SUCCESS)
+        exit(EXIT_FAILURE);
 }
 
 
@@ -19,10 +20,7 @@ Preview::Preview() {
 /// return MMAL_SUCCESS if all OK, something else otherwise
 MMAL_STATUS_T
 Preview::createComponent() {
-    // Convenient variables
-    MMAL_PORT_T *preview_port = nullptr;
     MMAL_STATUS_T status;
-
     if(!wantPreview) {
         // No preview required, so create a null sink component to take its place
         status = mmal_component_create("vc.null_sink", &previewComponent);
@@ -48,7 +46,7 @@ Preview::createComponent() {
             mmal_component_destroy(previewComponent);
             return status;
         }
-        preview_port = previewComponent->input[0];
+        MMAL_PORT_T *inputPort = previewComponent->input[0];
         MMAL_DISPLAYREGION_T param;
 
         param.hdr.id = MMAL_PARAMETER_DISPLAYREGION;
@@ -72,7 +70,7 @@ Preview::createComponent() {
             param.fullscreen = 0;
             param.dest_rect = previewWindow;
         }
-        status = mmal_port_parameter_set(preview_port, &param.hdr);
+        status = mmal_port_parameter_set(inputPort, &param.hdr);
         if(status != MMAL_SUCCESS && status != MMAL_ENOSYS) {
             qDebug() << QString("unable to set preview port parameters (%1)").arg(status);
             mmal_component_destroy(previewComponent);

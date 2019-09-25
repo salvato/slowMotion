@@ -38,9 +38,8 @@
 class PiCamera
 {
 public:
-    PiCamera();
+    PiCamera(int cameraNum, int sensorMode);
     ~PiCamera();
-    MMAL_STATUS_T createComponent(int cameraNum, int sensorMode);
     MMAL_STATUS_T setCallback();
     MMAL_STATUS_T setConfig(MMAL_PARAMETER_CAMERA_CONFIG_T* pCam_config);
     MMAL_STATUS_T setPortFormats(bool fullResPreview,
@@ -56,11 +55,12 @@ public:
     void capture(QString sPathName);
 
 public:
-    MMAL_COMPONENT_T *cameraComponent;// The Camera Component
-    CameraControl cameraControl;
+    MMAL_COMPONENT_T *component;// The Camera Component
+    CameraControl *pControl;
     MMAL_POOL_T *pool;
 
 protected:
+    MMAL_STATUS_T createComponent(int cameraNum, int sensorMode);
     MMAL_STATUS_T connectPorts(MMAL_PORT_T *output_port, MMAL_PORT_T *input_port, MMAL_CONNECTION_T **connection);
     void handleError(MMAL_STATUS_T status, Preview *pPreview);
     void checkDisablePort(MMAL_PORT_T *port);

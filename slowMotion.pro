@@ -19,7 +19,8 @@ SDKSTAGE = /home/pi/vc
 CONFIG += c++14
 
 
-SOURCES += main.cpp
+SOURCES += main.cpp \
+    utility.cpp
 SOURCES += setupdialog.cpp
 SOURCES += picamera.cpp
 SOURCES += maindialog.cpp
@@ -35,7 +36,8 @@ INCLUDEPATH+=-I$(SDKSTAGE)/include/interface/vmcs_host/linux
 INCLUDEPATH += /usr/local/include
 
 
-HEADERS += maindialog.h
+HEADERS += maindialog.h \
+    utility.h
 HEADERS += setupdialog.h
 HEADERS += picamera.h
 HEADERS += preview.h

@@ -1,4 +1,5 @@
 #include "cameracontrol.h"
+#include "utility.h"
 #include "bcm_host.h"
 #include <QDebug>
 #include <QString>
@@ -8,129 +9,10 @@
 #define zoom_increment_16P16 (65536UL / 10)
 
 
-CameraControl::CameraControl() {
+CameraControl::CameraControl(MMAL_COMPONENT_T *pCameraComponent)
+    : pComponent(pCameraComponent)
+{
     set_defaults();
-}
-
-
-/// Convert a MMAL status return value to a simple boolean of success
-/// Also displays a fault if code is not success
-/// @param status The error code to convert
-/// @return 0 if status is success, 1 otherwise
-int
-CameraControl::mmal_status_to_int(MMAL_STATUS_T status) {
-   if(status == MMAL_SUCCESS)
-      return 0;
-   else {
-      switch (status) {
-          case MMAL_ENOMEM :
-             qDebug() << QString("Out of memory");
-             break;
-          case MMAL_ENOSPC :
-             qDebug() << QString("Out of resources (other than memory)");
-             break;
-          case MMAL_EINVAL:
-             qDebug() << QString("Argument is invalid");
-             break;
-          case MMAL_ENOSYS :
-             qDebug() << QString("Function not implemented");
-             break;
-          case MMAL_ENOENT :
-             qDebug() << QString("No such file or directory");
-             break;
-          case MMAL_ENXIO :
-             qDebug() << QString("No such device or address");
-             break;
-          case MMAL_EIO :
-             qDebug() << QString("I/O error");
-             break;
-          case MMAL_ESPIPE :
-             qDebug() << QString("Illegal seek");
-             break;
-          case MMAL_ECORRUPT :
-             qDebug() << QString("Data is corrupt \attention FIXME: not POSIX");
-             break;
-          case MMAL_ENOTREADY :
-             qDebug() << QString("Component is not ready \attention FIXME: not POSIX");
-             break;
-          case MMAL_ECONFIG :
-             qDebug() << QString("Component is not configured \attention FIXME: not POSIX");
-             break;
-          case MMAL_EISCONN :
-             qDebug() << QString("Port is already connected ");
-             break;
-          case MMAL_ENOTCONN :
-             qDebug() << QString("Port is disconnected");
-             break;
-          case MMAL_EAGAIN :
-             qDebug() << QString("Resource temporarily unavailable. Try again later");
-             break;
-          case MMAL_EFAULT :
-             qDebug() << QString("Bad address");
-             break;
-          default :
-             qDebug() << QString("Unknown status error");
-             break;
-      }
-      return 1;
-   }
-}
-
-
-/**
- * Asked GPU how much memory it has allocated
- *
- * @return amount of memory in MB
- */
-int
-CameraControl::get_mem_gpu(void) {
-    char response[80] = "";
-    int gpu_mem = 0;
-    if (vc_gencmd(response, sizeof response, "get_mem gpu") == 0)
-        vc_gencmd_number_property(response, "gpu", &gpu_mem);
-    return gpu_mem;
-}
-
-
-/**
- * Ask GPU about its camera abilities
- * @param supported None-zero if software supports the camera
- * @param detected  None-zero if a camera has been detected
- */
-void
-CameraControl::get_camera(int *supported, int *detected) {
-    char response[80] = "";
-    if (vc_gencmd(response, sizeof response, "get_camera") == 0) {
-        if (supported)
-            vc_gencmd_number_property(response, "supported", supported);
-        if (detected)
-            vc_gencmd_number_property(response, "detected", detected);
-    }
-}
-
-
-
-/**
- * Check to see if camera is supported, and we have allocated enough memory
- * Ask GPU about its camera abilities
- * @param supported None-zero if software supports the camera
- * @param detected  None-zero if a camera has been detected
- */
-void
-CameraControl::checkConfiguration(int min_gpu_mem) {
-    int gpu_mem = get_mem_gpu();
-    int supported = 0, detected = 0;
-    get_camera(&supported, &detected);
-    if (!supported)
-        qDebug() << QString("Camera is not enabled in this build. Try running \"sudo raspi-config\" and ensure that \"camera\" has been enabled\n");
-    else if (gpu_mem < min_gpu_mem)
-        qDebug() << QString("Only %1M of gpu_mem is configured. Try running \"sudo raspi-config\" and ensure that \"memory_split\" has a value of %2 or greater\n")
-                    .arg(gpu_mem)
-                    .arg(min_gpu_mem);
-    else if (!detected)
-        qDebug() << QString("Camera is not detected. Please check carefully the camera module is installed correctly\n");
-    else
-        qDebug() << QString("Failed to run camera app. Please check for firmware updates\n");
 }
 
 
@@ -184,13 +66,13 @@ CameraControl::set_defaults() {
  * @return 0 if successful, non-zero if any parameters out of range
  */
 int
-CameraControl::set_saturation(MMAL_COMPONENT_T *camera, int saturation) {
+CameraControl::set_saturation(int saturation) {
     int ret = 0;
-    if(!camera)
+    if(!pComponent)
         return 1;
     if(saturation >= -100 && saturation <= 100) {
         MMAL_RATIONAL_T value = {saturation, 100};
-        ret = mmal_status_to_int(mmal_port_parameter_set_rational(camera->control, MMAL_PARAMETER_SATURATION, value));
+        ret = mmal_status_to_int(mmal_port_parameter_set_rational(pComponent->control, MMAL_PARAMETER_SATURATION, value));
     }
     else {
         qDebug() << QString("Invalid saturation value");
@@ -206,13 +88,13 @@ CameraControl::set_saturation(MMAL_COMPONENT_T *camera, int saturation) {
  * @param sharpness Sharpness adjustment -100 to 100
  */
 int
-CameraControl::set_sharpness(MMAL_COMPONENT_T *camera, int sharpness) {
+CameraControl::set_sharpness(int sharpness) {
     int ret = 0;
-    if(!camera)
+    if(!pComponent)
         return 1;
     if(sharpness >= -100 && sharpness <= 100) {
         MMAL_RATIONAL_T value = {sharpness, 100};
-        ret = mmal_status_to_int(mmal_port_parameter_set_rational(camera->control, MMAL_PARAMETER_SHARPNESS, value));
+        ret = mmal_status_to_int(mmal_port_parameter_set_rational(pComponent->control, MMAL_PARAMETER_SHARPNESS, value));
     }
     else {
         qDebug() << QString("Invalid sharpness value");
@@ -230,13 +112,13 @@ CameraControl::set_sharpness(MMAL_COMPONENT_T *camera, int sharpness) {
  * @return
  */
 int
-CameraControl::set_contrast(MMAL_COMPONENT_T *camera, int contrast) {
+CameraControl::set_contrast(int contrast) {
     int ret = 0;
-    if(!camera)
+    if(!pComponent)
         return 1;
     if(contrast >= -100 && contrast <= 100) {
         MMAL_RATIONAL_T value = {contrast, 100};
-        ret = mmal_status_to_int(mmal_port_parameter_set_rational(camera->control, MMAL_PARAMETER_CONTRAST, value));
+        ret = mmal_status_to_int(mmal_port_parameter_set_rational(pComponent->control, MMAL_PARAMETER_CONTRAST, value));
     }
     else {
         qDebug() << QString("Invalid contrast value");
@@ -253,13 +135,13 @@ CameraControl::set_contrast(MMAL_COMPONENT_T *camera, int contrast) {
  * @return 0 if successful, non-zero if any parameters out of range
  */
 int
-CameraControl::set_brightness(MMAL_COMPONENT_T *camera, int brightness) {
+CameraControl::set_brightness(int brightness) {
     int ret = 0;
-    if(!camera)
+    if(!pComponent)
         return 1;
     if(brightness >= 0 && brightness <= 100) {
         MMAL_RATIONAL_T value = {brightness, 100};
-        ret = mmal_status_to_int(mmal_port_parameter_set_rational(camera->control, MMAL_PARAMETER_BRIGHTNESS, value));
+        ret = mmal_status_to_int(mmal_port_parameter_set_rational(pComponent->control, MMAL_PARAMETER_BRIGHTNESS, value));
     }
     else {
         qDebug() << QString("Invalid brightness value");
@@ -277,10 +159,10 @@ CameraControl::set_brightness(MMAL_COMPONENT_T *camera, int brightness) {
  * @return 0 if successful, non-zero if any parameters out of range
  */
 int
-CameraControl::set_ISO(MMAL_COMPONENT_T *camera, int ISO) {
-    if(!camera)
+CameraControl::set_ISO(int ISO) {
+    if(!pComponent)
         return 1;
-    return mmal_status_to_int(mmal_port_parameter_set_uint32(camera->control, MMAL_PARAMETER_ISO, uint32_t(ISO)));
+    return mmal_status_to_int(mmal_port_parameter_set_uint32(pComponent->control, MMAL_PARAMETER_ISO, uint32_t(ISO)));
 }
 
 
@@ -291,10 +173,10 @@ CameraControl::set_ISO(MMAL_COMPONENT_T *camera, int ISO) {
  * @return 0 if successful, non-zero if any parameters out of range
  */
 int
-CameraControl::set_exposure_compensation(MMAL_COMPONENT_T *camera, int exp_comp) {
-    if(!camera)
+CameraControl::set_exposure_compensation(int exp_comp) {
+    if(!pComponent)
         return 1;
-    return mmal_status_to_int(mmal_port_parameter_set_int32(camera->control, MMAL_PARAMETER_EXPOSURE_COMP, exp_comp));
+    return mmal_status_to_int(mmal_port_parameter_set_int32(pComponent->control, MMAL_PARAMETER_EXPOSURE_COMP, exp_comp));
 }
 
 
@@ -305,10 +187,10 @@ CameraControl::set_exposure_compensation(MMAL_COMPONENT_T *camera, int exp_comp)
  * @return 0 if successful, non-zero if any parameters out of range
  */
 int
-CameraControl::set_video_stabilisation(MMAL_COMPONENT_T *camera, int vstabilisation) {
-    if(!camera)
+CameraControl::set_video_stabilisation(int vstabilisation) {
+    if(!pComponent)
         return 1;
-    return mmal_status_to_int(mmal_port_parameter_set_boolean(camera->control, MMAL_PARAMETER_VIDEO_STABILISATION, vstabilisation));
+    return mmal_status_to_int(mmal_port_parameter_set_boolean(pComponent->control, MMAL_PARAMETER_VIDEO_STABILISATION, vstabilisation));
 }
 
 
@@ -333,11 +215,11 @@ CameraControl::set_video_stabilisation(MMAL_COMPONENT_T *camera, int vstabilisat
  * @return 0 if successful, non-zero if any parameters out of range
  */
 int
-CameraControl::set_exposure_mode(MMAL_COMPONENT_T *camera, MMAL_PARAM_EXPOSUREMODE_T mode) {
+CameraControl::set_exposure_mode(MMAL_PARAM_EXPOSUREMODE_T mode) {
     MMAL_PARAMETER_EXPOSUREMODE_T exp_mode = {{MMAL_PARAMETER_EXPOSURE_MODE,sizeof(exp_mode)}, mode};
-    if(!camera)
+    if(!pComponent)
         return 1;
-    return mmal_status_to_int(mmal_port_parameter_set(camera->control, &exp_mode.hdr));
+    return mmal_status_to_int(mmal_port_parameter_set(pComponent->control, &exp_mode.hdr));
 }
 
 
@@ -353,11 +235,11 @@ CameraControl::set_exposure_mode(MMAL_COMPONENT_T *camera, MMAL_PARAM_EXPOSUREMO
  * @return 0 if successful, non-zero if any parameters out of range
  */
 int
-CameraControl::set_flicker_avoid_mode(MMAL_COMPONENT_T *camera, MMAL_PARAM_FLICKERAVOID_T mode) {
+CameraControl::set_flicker_avoid_mode(MMAL_PARAM_FLICKERAVOID_T mode) {
     MMAL_PARAMETER_FLICKERAVOID_T fl_mode = {{MMAL_PARAMETER_FLICKER_AVOID,sizeof(fl_mode)}, mode};
-    if(!camera)
+    if(!pComponent)
         return 1;
-    return mmal_status_to_int(mmal_port_parameter_set(camera->control, &fl_mode.hdr));
+    return mmal_status_to_int(mmal_port_parameter_set(pComponent->control, &fl_mode.hdr));
 }
 
 
@@ -372,13 +254,13 @@ CameraControl::set_flicker_avoid_mode(MMAL_COMPONENT_T *camera, MMAL_PARAM_FLICK
  * @return 0 if successful, non-zero if any parameters out of range
  */
 int
-CameraControl::set_metering_mode(MMAL_COMPONENT_T *camera, MMAL_PARAM_EXPOSUREMETERINGMODE_T m_mode ) {
+CameraControl::set_metering_mode(MMAL_PARAM_EXPOSUREMETERINGMODE_T m_mode ) {
     MMAL_PARAMETER_EXPOSUREMETERINGMODE_T meter_mode = {{MMAL_PARAMETER_EXP_METERING_MODE,sizeof(meter_mode)},
                                                         m_mode
                                                        };
-    if(!camera)
+    if(!pComponent)
         return 1;
-    return mmal_status_to_int(mmal_port_parameter_set(camera->control, &meter_mode.hdr));
+    return mmal_status_to_int(mmal_port_parameter_set(pComponent->control, &meter_mode.hdr));
 }
 
 
@@ -399,25 +281,25 @@ CameraControl::set_metering_mode(MMAL_COMPONENT_T *camera, MMAL_PARAM_EXPOSUREME
  * @return 0 if successful, non-zero if any parameters out of range
  */
 int
-CameraControl::set_awb_mode(MMAL_COMPONENT_T *camera, MMAL_PARAM_AWBMODE_T awb_mode) {
+CameraControl::set_awb_mode(MMAL_PARAM_AWBMODE_T awb_mode) {
     MMAL_PARAMETER_AWBMODE_T param = {{MMAL_PARAMETER_AWB_MODE,sizeof(param)}, awb_mode};
-    if(!camera)
+    if(!pComponent)
         return 1;
-    return mmal_status_to_int(mmal_port_parameter_set(camera->control, &param.hdr));
+    return mmal_status_to_int(mmal_port_parameter_set(pComponent->control, &param.hdr));
 }
 
 
 int
-CameraControl::set_awb_gains(MMAL_COMPONENT_T *camera, float r_gain, float b_gain) {
+CameraControl::set_awb_gains(float r_gain, float b_gain) {
     MMAL_PARAMETER_AWB_GAINS_T param = {{MMAL_PARAMETER_CUSTOM_AWB_GAINS,sizeof(param)}, {0,0}, {0,0}};
-    if(!camera)
+    if(!pComponent)
         return 1;
     if(r_gain==0.0f || b_gain==0.0f)
         return 0;
     param.r_gain.num = int(r_gain * 65536.0f);
     param.b_gain.num = int(b_gain * 65536.0f);
     param.r_gain.den = param.b_gain.den = 65536;
-    return mmal_status_to_int(mmal_port_parameter_set(camera->control, &param.hdr));
+    return mmal_status_to_int(mmal_port_parameter_set(pComponent->control, &param.hdr));
 }
 
 
@@ -451,11 +333,11 @@ CameraControl::set_awb_gains(MMAL_COMPONENT_T *camera, float r_gain, float b_gai
  * @return 0 if successful, non-zero if any parameters out of range
  */
 int
-CameraControl::set_imageFX(MMAL_COMPONENT_T *camera, MMAL_PARAM_IMAGEFX_T imageFX) {
+CameraControl::set_imageFX(MMAL_PARAM_IMAGEFX_T imageFX) {
     MMAL_PARAMETER_IMAGEFX_T imgFX = {{MMAL_PARAMETER_IMAGE_EFFECT,sizeof(imgFX)}, imageFX};
-    if(!camera)
+    if(!pComponent)
         return 1;
-    return mmal_status_to_int(mmal_port_parameter_set(camera->control, &imgFX.hdr));
+    return mmal_status_to_int(mmal_port_parameter_set(pComponent->control, &imgFX.hdr));
 }
 
 
@@ -466,14 +348,14 @@ CameraControl::set_imageFX(MMAL_COMPONENT_T *camera, MMAL_PARAM_IMAGEFX_T imageF
  * @return 0 if successful, non-zero if any parameters out of range
  */
 int
-CameraControl::set_colourFX(MMAL_COMPONENT_T *camera, const MMAL_PARAM_COLOURFX_T *colourFX) {
+CameraControl::set_colourFX(const MMAL_PARAM_COLOURFX_T *colourFX) {
     MMAL_PARAMETER_COLOURFX_T colfx = {{MMAL_PARAMETER_COLOUR_EFFECT,sizeof(colfx)}, 0, 0, 0};
-    if(!camera)
+    if(!pComponent)
         return 1;
     colfx.enable = colourFX->enable;
     colfx.u = uint32_t(colourFX->u);
     colfx.v = uint32_t(colourFX->v);
-    return mmal_status_to_int(mmal_port_parameter_set(camera->control, &colfx.hdr));
+    return mmal_status_to_int(mmal_port_parameter_set(pComponent->control, &colfx.hdr));
 }
 
 
@@ -484,12 +366,12 @@ CameraControl::set_colourFX(MMAL_COMPONENT_T *camera, const MMAL_PARAM_COLOURFX_
  * @return 0 if successful, non-zero if any parameters out of range
  */
 int
-CameraControl::set_rotation(MMAL_COMPONENT_T *camera, int rotation) {
+CameraControl::set_rotation(int rotation) {
     uint32_t ret;
     int my_rotation = ((rotation % 360 ) / 90) * 90;
-    ret = mmal_port_parameter_set_int32(camera->output[0], MMAL_PARAMETER_ROTATION, my_rotation);
-    mmal_port_parameter_set_int32(camera->output[1], MMAL_PARAMETER_ROTATION, my_rotation);
-    mmal_port_parameter_set_int32(camera->output[2], MMAL_PARAMETER_ROTATION, my_rotation);
+    ret = mmal_port_parameter_set_int32(pComponent->output[0], MMAL_PARAMETER_ROTATION, my_rotation);
+    mmal_port_parameter_set_int32(pComponent->output[1], MMAL_PARAMETER_ROTATION, my_rotation);
+    mmal_port_parameter_set_int32(pComponent->output[2], MMAL_PARAMETER_ROTATION, my_rotation);
     return mmal_status_to_int(MMAL_STATUS_T(ret));
 }
 
@@ -503,7 +385,7 @@ CameraControl::set_rotation(MMAL_COMPONENT_T *camera, int rotation) {
  * @return 0 if successful, non-zero if any parameters out of range
  */
 int
-CameraControl::set_flips(MMAL_COMPONENT_T *camera, int hflip, int vflip) {
+CameraControl::set_flips(int hflip, int vflip) {
     MMAL_PARAMETER_MIRROR_T mirror = {{MMAL_PARAMETER_MIRROR, sizeof(MMAL_PARAMETER_MIRROR_T)}, MMAL_PARAM_MIRROR_NONE};
     if(hflip && vflip)
         mirror.value = MMAL_PARAM_MIRROR_BOTH;
@@ -511,9 +393,9 @@ CameraControl::set_flips(MMAL_COMPONENT_T *camera, int hflip, int vflip) {
         mirror.value = MMAL_PARAM_MIRROR_HORIZONTAL;
     else if(vflip)
         mirror.value = MMAL_PARAM_MIRROR_VERTICAL;
-    mmal_port_parameter_set(camera->output[0], &mirror.hdr);
-    mmal_port_parameter_set(camera->output[1], &mirror.hdr);
-    return mmal_status_to_int(mmal_port_parameter_set(camera->output[2], &mirror.hdr));
+    mmal_port_parameter_set(pComponent->output[0], &mirror.hdr);
+    mmal_port_parameter_set(pComponent->output[1], &mirror.hdr);
+    return mmal_status_to_int(mmal_port_parameter_set(pComponent->output[2], &mirror.hdr));
 }
 
 
@@ -526,14 +408,14 @@ CameraControl::set_flips(MMAL_COMPONENT_T *camera, int hflip, int vflip) {
  * @return 0 if successful, non-zero if any parameters out of range
  */
 int
-CameraControl::set_ROI(MMAL_COMPONENT_T *camera, PARAM_FLOAT_RECT_T rect) {
+CameraControl::set_ROI(PARAM_FLOAT_RECT_T rect) {
     MMAL_PARAMETER_INPUT_CROP_T crop;
     crop.hdr = {MMAL_PARAMETER_INPUT_CROP, sizeof(MMAL_PARAMETER_INPUT_CROP_T)};
     crop.rect.x = int32_t(65536.0 * rect.x);
     crop.rect.y = int32_t(65536.0 * rect.y);
     crop.rect.width = int32_t(65536.0 * rect.w);
     crop.rect.height = int32_t(65536.0 * rect.h);
-    return mmal_status_to_int(mmal_port_parameter_set(camera->control, &crop.hdr));
+    return mmal_status_to_int(mmal_port_parameter_set(pComponent->control, &crop.hdr));
 }
 
 
@@ -544,10 +426,10 @@ CameraControl::set_ROI(MMAL_COMPONENT_T *camera, PARAM_FLOAT_RECT_T rect) {
  * @return 0 if successful, non-zero if any parameters out of range
  */
 int
-CameraControl::set_shutter_speed(MMAL_COMPONENT_T *camera, int speed) {
-    if(!camera)
+CameraControl::set_shutter_speed(int speed) {
+    if(!pComponent)
         return 1;
-    return mmal_status_to_int(mmal_port_parameter_set_uint32(camera->control,
+    return mmal_status_to_int(mmal_port_parameter_set_uint32(pComponent->control,
                                                              MMAL_PARAMETER_SHUTTER_SPEED,
                                                              uint32_t(speed)));
 }
@@ -565,19 +447,19 @@ CameraControl::set_shutter_speed(MMAL_COMPONENT_T *camera, int speed) {
  * @return 0 if successful, non-zero if any parameters out of range
  */
 int
-CameraControl::set_DRC(MMAL_COMPONENT_T *camera, MMAL_PARAMETER_DRC_STRENGTH_T strength) {
+CameraControl::set_DRC(MMAL_PARAMETER_DRC_STRENGTH_T strength) {
     MMAL_PARAMETER_DRC_T drc = {{MMAL_PARAMETER_DYNAMIC_RANGE_COMPRESSION, sizeof(MMAL_PARAMETER_DRC_T)}, strength};
-    if(!camera)
+    if(!pComponent)
         return 1;
-    return mmal_status_to_int(mmal_port_parameter_set(camera->control, &drc.hdr));
+    return mmal_status_to_int(mmal_port_parameter_set(pComponent->control, &drc.hdr));
 }
 
 
 int
-CameraControl::set_stats_pass(MMAL_COMPONENT_T *camera, int stats_pass) {
-    if(!camera)
+CameraControl::set_stats_pass(int stats_pass) {
+    if(!pComponent)
         return 1;
-    return mmal_status_to_int(mmal_port_parameter_set_boolean(camera->control, MMAL_PARAMETER_CAPTURE_STATS_PASS, stats_pass));
+    return mmal_status_to_int(mmal_port_parameter_set_boolean(pComponent->control, MMAL_PARAMETER_CAPTURE_STATS_PASS, stats_pass));
 }
 
 
@@ -590,7 +472,7 @@ CameraControl::set_stats_pass(MMAL_COMPONENT_T *camera, int stats_pass) {
  * @return 0 if successful, non-zero if any parameters out of range
  */
 int
-CameraControl::set_annotate(MMAL_COMPONENT_T *camera, const int settings, const char *string,
+CameraControl::set_annotate(const int settings, const char *string,
                              const int text_size, const int text_colour, const int bg_colour,
                              const unsigned int justify, const unsigned int x, const unsigned int y)
 {
@@ -671,22 +553,22 @@ CameraControl::set_annotate(MMAL_COMPONENT_T *camera, const int settings, const 
     }
     else
         annotate.enable = 0;
-    return mmal_status_to_int(mmal_port_parameter_set(camera->control, &annotate.hdr));
+    return mmal_status_to_int(mmal_port_parameter_set(pComponent->control, &annotate.hdr));
 }
 
 
 int
-CameraControl::set_gains(MMAL_COMPONENT_T *camera, float analog, float digital) {
+CameraControl::set_gains(float analog, float digital) {
     MMAL_RATIONAL_T rational = {0,65536};
     MMAL_STATUS_T status;
-    if(!camera)
+    if(!pComponent)
         return 1;
     rational.num = int32_t(analog * 65536);
-    status = mmal_port_parameter_set_rational(camera->control, MMAL_PARAMETER_ANALOG_GAIN, rational);
+    status = mmal_port_parameter_set_rational(pComponent->control, MMAL_PARAMETER_ANALOG_GAIN, rational);
     if(status != MMAL_SUCCESS)
         return mmal_status_to_int(status);
     rational.num = int32_t(digital * 65536);
-    status = mmal_port_parameter_set_rational(camera->control, MMAL_PARAMETER_DIGITAL_GAIN, rational);
+    status = mmal_port_parameter_set_rational(pComponent->control, MMAL_PARAMETER_DIGITAL_GAIN, rational);
     return mmal_status_to_int(status);
 }
 
@@ -698,11 +580,11 @@ CameraControl::set_gains(MMAL_COMPONENT_T *camera, float analog, float digital) 
  * @return 0 if successful, non-zero otherwise
  */
 int
-CameraControl::zoom_in_zoom_out(MMAL_COMPONENT_T *camera, ZOOM_COMMAND_T zoom_command, PARAM_FLOAT_RECT_T *roi) {
+CameraControl::zoom_in_zoom_out(ZOOM_COMMAND_T zoom_command, PARAM_FLOAT_RECT_T *roi) {
     MMAL_PARAMETER_INPUT_CROP_T crop;
     crop.hdr.id = MMAL_PARAMETER_INPUT_CROP;
     crop.hdr.size = sizeof(crop);
-    if(mmal_port_parameter_get(camera->control, &crop.hdr) != MMAL_SUCCESS) {
+    if(mmal_port_parameter_get(pComponent->control, &crop.hdr) != MMAL_SUCCESS) {
         qDebug() << QString("mmal_port_parameter_get(camera->control, &crop.hdr) failed, skip it");
         return 0;
     }
@@ -739,7 +621,7 @@ CameraControl::zoom_in_zoom_out(MMAL_COMPONENT_T *camera, ZOOM_COMMAND_T zoom_co
         crop.rect.x = int32_t(centered_top_coordinate);
         crop.rect.y = int32_t(centered_top_coordinate);
     }
-    int ret = mmal_status_to_int(mmal_port_parameter_set(camera->control, &crop.hdr));
+    int ret = mmal_status_to_int(mmal_port_parameter_set(pComponent->control, &crop.hdr));
     if(ret == 0) {
         roi->x = roi->y = double(crop.rect.x)/65536.0;
         roi->w = roi->h = double(crop.rect.width)/65536.0;
