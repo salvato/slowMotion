@@ -41,7 +41,92 @@ MainDialog::MainDialog(QWidget *parent)
     videoPos  = pUi->labelVideo->pos();
     videoSize = pUi->labelVideo->size();
 
-    // Setup the QLineEdit styles
+    setupStyles();// Setup the QLineEdit visual styles
+
+    if(!gpioInit())
+        exit(EXIT_FAILURE);
+    pSetupDlg = new setupDialog(gpioHostHandle);
+
+    restoreSettings();
+
+    // Init User Interface with restored values
+    pUi->pathEdit->setText(sBaseDir);
+    pUi->nameEdit->setText(sOutFileName);
+    pUi->startButton->setEnabled(true);
+    pUi->stopButton->setDisabled(true);
+    pUi->intervalEdit->setText(QString("%1").arg(msecInterval));
+    pUi->tTimeEdit->setText(QString("%1").arg(secTotTime));
+    pUi->labelVideo->setStyleSheet(sBlackStyle);
+
+    switchLampOff();
+    intervalTimer.stop();// Probably non needed but...does'nt hurt
+    connect(&intervalTimer,
+            SIGNAL(timeout()),
+            this,
+            SLOT(onTimeToGetNewImage()));
+
+    getSensorDefaults(cameraNum,
+                      camera_name,
+                      &width,
+                      &height);
+    dumpParameters();
+
+    pCamera        = new PiCamera();
+    pPreview       = new Preview();// Setup preview window defaults
+    pCameraControl = new CameraControl();// Set up the camera_parameters to default
+
+    pCamera->createComponent(cameraNum,
+                             sensor_mode);
+    pPreview->createComponent();
+
+    // set up the camera configuration
+    MMAL_PARAMETER_CAMERA_CONFIG_T camConfig;
+    camConfig.hdr = { MMAL_PARAMETER_CAMERA_CONFIG, sizeof(camConfig) };
+    camConfig.max_stills_w = uint32_t(width);
+    camConfig.max_stills_h = uint32_t(height);
+    camConfig.stills_yuv422 = 0;
+    camConfig.one_shot_stills = 1;
+    camConfig.max_preview_video_w = uint32_t(pPreview->previewWindow.width);
+    camConfig.max_preview_video_h = uint32_t(pPreview->previewWindow.height);
+    camConfig.num_preview_video_frames = 3;
+    camConfig.stills_capture_circular_buffer_height = 0;
+    camConfig.fast_preview_resume = 0;
+    camConfig.use_stc_timestamp = MMAL_PARAM_TIMESTAMP_MODE_RESET_STC;
+    if(state.fullResPreview) {
+        camConfig.max_preview_video_w = uint32_t(width);
+        camConfig.max_preview_video_h = uint32_t(height);
+    }
+    status = pCamera->setConfig(&camConfig);
+    if(status != MMAL_SUCCESS) {
+        qDebug() << QString("Could not set sensor configuration: error") << status;
+        exit(EXIT_FAILURE);
+    }
+    // set up Camera Parameters
+    int iResult = pCamera->setAllParameters();
+    if(iResult != 0) {
+        qDebug() << "Unable to set Camera Parameters. error:" << iResult;
+        exit(EXIT_FAILURE);
+    }
+    status = pCamera->setPortFormats(state.fullResPreview,
+                                     state.encoding,
+                                     width,
+                                     height);
+    if(status != MMAL_SUCCESS) {
+        qDebug() << "Unable to set Port Formats. error:" << status;
+        exit(EXIT_FAILURE);
+    }
+    status = pCamera->enableCamera();
+    if(status != MMAL_SUCCESS) {
+        qDebug() << "Unable to Enable Camera. error:" << status;
+        exit(EXIT_FAILURE);
+    }
+    pCamera->createBufferPool();
+    pCameraControl->set_flips(pCamera->cameraComponent, 0, 1);
+}
+
+
+void
+MainDialog::setupStyles() {
     sNormalStyle = pUi->lampStatus->styleSheet();
     sErrorStyle  = "QLineEdit { \
                         color: rgb(255, 255, 255); \
@@ -64,89 +149,6 @@ MainDialog::MainDialog(QWidget *parent)
                         background: rgb(0, 0, 0); \
                         selection-background-color: rgb(128, 128, 255); \
                     }";
-    if(!gpioInit())
-        exit(EXIT_FAILURE);
-
-    pSetupDlg = new setupDialog(gpioHostHandle);
-
-    switchLampOff();
-
-    restoreSettings();
-
-    // Init User Interface with restored values
-    pUi->pathEdit->setText(sBaseDir);
-    pUi->nameEdit->setText(sOutFileName);
-    pUi->startButton->setEnabled(true);
-    pUi->stopButton->setDisabled(true);
-    pUi->intervalEdit->setText(QString("%1").arg(msecInterval));
-    pUi->tTimeEdit->setText(QString("%1").arg(secTotTime));
-    pUi->labelVideo->setStyleSheet(sBlackStyle);
-
-    intervalTimer.stop();// Probably non needed but...does'nt hurt
-    connect(&intervalTimer,
-            SIGNAL(timeout()),
-            this,
-            SLOT(onTimeToGetNewImage()));
-
-    getSensorDefaults(commonSettings.cameraNum,
-                      commonSettings.camera_name,
-                      &commonSettings.width,
-                      &commonSettings.height);
-    qDebug() << "Common Parameters Dump:";
-    commonSettings.dump_parameters();
-
-    pCamera        = new PiCamera();
-    pPreview       = new Preview();// Setup preview window defaults
-    pCameraControl = new CameraControl();// Set up the camera_parameters to default
-
-    pCamera->createComponent(commonSettings.cameraNum,
-                             commonSettings.sensor_mode);
-    pPreview->createComponent();
-
-    // set up the camera configuration
-    MMAL_PARAMETER_CAMERA_CONFIG_T camConfig;
-    camConfig.hdr = { MMAL_PARAMETER_CAMERA_CONFIG, sizeof(camConfig) };
-    camConfig.max_stills_w = uint32_t(commonSettings.width);
-    camConfig.max_stills_h = uint32_t(commonSettings.height);
-    camConfig.stills_yuv422 = 0;
-    camConfig.one_shot_stills = 1;
-    camConfig.max_preview_video_w = uint32_t(pPreview->previewWindow.width);
-    camConfig.max_preview_video_h = uint32_t(pPreview->previewWindow.height);
-    camConfig.num_preview_video_frames = 3;
-    camConfig.stills_capture_circular_buffer_height = 0;
-    camConfig.fast_preview_resume = 0;
-    camConfig.use_stc_timestamp = MMAL_PARAM_TIMESTAMP_MODE_RESET_STC;
-    if(state.fullResPreview) {
-        camConfig.max_preview_video_w = uint32_t(commonSettings.width);
-        camConfig.max_preview_video_h = uint32_t(commonSettings.height);
-    }
-    status = pCamera->setConfig(&camConfig);
-    if(status != MMAL_SUCCESS) {
-        qDebug() << QString("Could not set sensor configuration: error") << status;
-        exit(EXIT_FAILURE);
-    }
-    // set up Camera Parameters
-    int iResult = pCamera->setAllParameters();
-    if(iResult != 0) {
-        qDebug() << "Unable to set Camera Parameters. error:" << iResult;
-        exit(EXIT_FAILURE);
-    }
-    status = pCamera->setPortFormats(&pCameraControl->cameraParameters,
-                                     state.fullResPreview,
-                                     state.encoding,
-                                     commonSettings.width,
-                                     commonSettings.height);
-    if(status != MMAL_SUCCESS) {
-        qDebug() << "Unable to set Port Formats. error:" << status;
-        exit(EXIT_FAILURE);
-    }
-    status = pCamera->enableCamera();
-    if(status != MMAL_SUCCESS) {
-        qDebug() << "Unable to Enable Camera. error:" << status;
-        exit(EXIT_FAILURE);
-    }
-    pCamera->createBufferPool();
-    pCameraControl->set_flips(pCamera->cameraComponent, 0, 1);
 }
 
 
@@ -196,6 +198,26 @@ MainDialog::restoreSettings() {
     msecInterval    = settings.value("Interval", 10000).toInt();
     secTotTime      = settings.value("TotalTime", 0).toInt();
 
+}
+
+
+void
+MainDialog::dumpParameters() {
+    qDebug() << endl;
+    qDebug() << "Camera Parameters Dump:";
+    qDebug() << endl;
+    qDebug() << QString("Camera Name %1")
+                .arg(camera_name);
+    qDebug() << QString("Width %1, Height %2, filename %3")
+                .arg(width)
+                .arg(height)
+                .arg(filename);
+    qDebug() << QString("Using camera %1, sensor mode %2")
+                .arg(cameraNum)
+                .arg(sensor_mode);
+    qDebug() << QString("GPS output %1")
+                .arg(gps ? "Enabled" : "Disabled");
+    qDebug() << endl;
 }
 
 
@@ -284,8 +306,7 @@ MainDialog::getSensorDefaults(int camera_num, char *camera_name, int *width, int
       param.hdr.size = sizeof(param)-4;  // Deliberately undersize to check firmware version
       status = mmal_port_parameter_get(camera_info->control, &param.hdr);
 
-      if(status != MMAL_SUCCESS) {
-         // Running on newer firmware
+      if(status != MMAL_SUCCESS) {// Running on newer firmware
          param.hdr.size = sizeof(param);
          status = mmal_port_parameter_get(camera_info->control, &param.hdr);
          if(status == MMAL_SUCCESS && param.num_cameras > uint32_t(camera_num)) {
@@ -310,9 +331,9 @@ MainDialog::getSensorDefaults(int camera_num, char *camera_name, int *width, int
       qDebug() << QString("Failed to create camera_info component");
    }
    // default to OV5647 if nothing detected..
-   if (*width == 0)
+   if(*width == 0)
       *width = 2592;
-   if (*height == 0)
+   if(*height == 0)
       *height = 1944;
 }
 

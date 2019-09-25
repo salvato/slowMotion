@@ -24,7 +24,7 @@ SOURCES += setupdialog.cpp
 SOURCES += picamera.cpp
 SOURCES += maindialog.cpp
 SOURCES += preview.cpp
-SOURCES += commonsettings.cpp
+SOURCES +=
 SOURCES += cameracontrol.cpp
 
 
@@ -39,7 +39,7 @@ HEADERS += maindialog.h
 HEADERS += setupdialog.h
 HEADERS += picamera.h
 HEADERS += preview.h
-HEADERS += commonsettings.h
+HEADERS +=
 HEADERS += cameracontrol.h
 
 

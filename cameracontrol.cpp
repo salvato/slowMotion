@@ -9,8 +9,6 @@
 
 
 CameraControl::CameraControl() {
-    // Default everything to zero
-    memset(&cameraParameters, 0, sizeof(RASPICAM_CAMERA_PARAMETERS));
     set_defaults();
 }
 
@@ -140,42 +138,42 @@ CameraControl::checkConfiguration(int min_gpu_mem) {
 ///  @param Pointer to parameter block
 void
 CameraControl::set_defaults() {
-    cameraParameters.sharpness             = 0;
-    cameraParameters.contrast              = 0;
-    cameraParameters.brightness            = 50;
-    cameraParameters.saturation            = 0;
-    cameraParameters.ISO                   = 0;// 0 = auto
-    cameraParameters.videoStabilisation    = 0;
-    cameraParameters.exposureCompensation  = 0;
-    cameraParameters.exposureMode          = MMAL_PARAM_EXPOSUREMODE_AUTO;
-    cameraParameters.flickerAvoidMode      = MMAL_PARAM_FLICKERAVOID_OFF;
-    cameraParameters.exposureMeterMode     = MMAL_PARAM_EXPOSUREMETERINGMODE_AVERAGE;
-    cameraParameters.awbMode               = MMAL_PARAM_AWBMODE_AUTO;
-    cameraParameters.imageEffect           = MMAL_PARAM_IMAGEFX_NONE;
-    cameraParameters.colourEffects.enable  = 0;
-    cameraParameters.colourEffects.u       = 128;
-    cameraParameters.colourEffects.v       = 128;
-    cameraParameters.rotation              = 0;
-    cameraParameters.hflip                 = 0;
-    cameraParameters.vflip                 = 0;
-    cameraParameters.roi.x                 = 0.0;
-    cameraParameters.roi.y                 = 0.0;
-    cameraParameters.roi.w                 = 1.0;
-    cameraParameters.roi.h                 = 1.0;
-    cameraParameters.shutter_speed         = 0;// 0 = auto
-    cameraParameters.awb_gains_r           = 0;// Only have any function if AWB OFF is used.
-    cameraParameters.awb_gains_b           = 0;
-    cameraParameters.drc_level             = MMAL_PARAMETER_DRC_STRENGTH_OFF;
-    cameraParameters.stats_pass            = MMAL_FALSE;
-    cameraParameters.enable_annotate       = 0;
-    cameraParameters.annotate_string[0]    = '\0';
-    cameraParameters.annotate_text_size    = 0; //Use firmware default
-    cameraParameters.annotate_text_colour  = -1;//Use firmware default
-    cameraParameters.annotate_bg_colour    = -1;//Use firmware default
-    cameraParameters.stereo_mode.mode      = MMAL_STEREOSCOPIC_MODE_NONE;
-    cameraParameters.stereo_mode.decimate  = MMAL_FALSE;
-    cameraParameters.stereo_mode.swap_eyes = MMAL_FALSE;
-    cameraParameters.onlyLuma              = MMAL_TRUE;
+    sharpness             = 0;
+    contrast              = 0;
+    brightness            = 50;
+    saturation            = 0;
+    ISO                   = 0;// 0 = auto
+    videoStabilisation    = 0;
+    exposureCompensation  = 0;
+    exposureMode          = MMAL_PARAM_EXPOSUREMODE_AUTO;
+    flickerAvoidMode      = MMAL_PARAM_FLICKERAVOID_OFF;
+    exposureMeterMode     = MMAL_PARAM_EXPOSUREMETERINGMODE_AVERAGE;
+    awbMode               = MMAL_PARAM_AWBMODE_AUTO;
+    imageEffect           = MMAL_PARAM_IMAGEFX_NONE;
+    colourEffects.enable  = 0;
+    colourEffects.u       = 128;
+    colourEffects.v       = 128;
+    rotation              = 0;
+    hflip                 = 0;
+    vflip                 = 0;
+    roi.x                 = 0.0;
+    roi.y                 = 0.0;
+    roi.w                 = 1.0;
+    roi.h                 = 1.0;
+    shutter_speed         = 0;// 0 = auto
+    awb_gains_r           = 0;// Only have any function if AWB OFF is used.
+    awb_gains_b           = 0;
+    drc_level             = MMAL_PARAMETER_DRC_STRENGTH_OFF;
+    stats_pass            = MMAL_FALSE;
+    enable_annotate       = 0;
+    annotate_string[0]    = '\0';
+    annotate_text_size    = 0; //Use firmware default
+    annotate_text_colour  = -1;//Use firmware default
+    annotate_bg_colour    = -1;//Use firmware default
+    stereo_mode.mode      = MMAL_STEREOSCOPIC_MODE_NONE;
+    stereo_mode.decimate  = MMAL_FALSE;
+    stereo_mode.swap_eyes = MMAL_FALSE;
+    onlyLuma              = MMAL_TRUE;
 }
 
 

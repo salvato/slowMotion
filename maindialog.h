@@ -7,7 +7,6 @@
 #include "picamera.h"
 #include "preview.h"
 #include "cameracontrol.h"
-#include "commonsettings.h"
 #include "setupdialog.h"
 
 
@@ -41,9 +40,11 @@ public:
     ~MainDialog() Q_DECL_OVERRIDE;
 
 protected:
+    void setupStyles();
+    void closeEvent(QCloseEvent *event) Q_DECL_OVERRIDE;
     void moveEvent(QMoveEvent *event) Q_DECL_OVERRIDE;
     void restoreSettings();
-    void closeEvent(QCloseEvent *event) Q_DECL_OVERRIDE;
+    void dumpParameters();
     void switchLampOn();
     void switchLampOff();
     bool checkValues();
@@ -68,7 +69,6 @@ private:
     PiCamera* pCamera;
     Preview* pPreview;
     CameraControl* pCameraControl;
-    CommonSettings commonSettings;
     APP_STATE state;
 
     setupDialog*    pSetupDlg;
@@ -103,4 +103,12 @@ private:
     QPoint dialogPos;
     QPoint videoPos;
     QSize videoSize;
+
+    char camera_name[MMAL_PARAMETER_CAMERA_INFO_MAX_STR_LEN]; /// Name of the camera sensor
+    int width;       /// Requested width of image
+    int height;      /// requested height of image
+    char *filename;  /// filename of output file
+    int cameraNum;   /// Camera number
+    int sensor_mode; /// Sensor mode. 0=auto. Check docs/forum for modes selected by other values.
+    int gps;         /// Add real-time gpsd output to output
 };

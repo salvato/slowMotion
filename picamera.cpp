@@ -73,7 +73,7 @@ cameraBufferCallback(MMAL_PORT_T *port, MMAL_BUFFER_HEADER_T *buffer) {
     if(pData) {
         uint bytes_written = 0;
         uint bytes_to_write = buffer->length;
-        if(pData->pCamera->cameraControl.cameraParameters.onlyLuma)
+        if(pData->pCamera->cameraControl.onlyLuma)
             bytes_to_write = vcos_min(buffer->length, port->format->es->video.width * port->format->es->video.height);
         if(bytes_to_write && pData->file_handle) {
             mmal_buffer_header_mem_lock(buffer);
@@ -221,37 +221,36 @@ PiCamera::setConfig(MMAL_PARAMETER_CAMERA_CONFIG_T* pCam_config) {
 int
 PiCamera::setAllParameters() {
     int result;
-    RASPICAM_CAMERA_PARAMETERS params =cameraControl.cameraParameters;
-    result  = cameraControl.set_saturation(cameraComponent, params.saturation);
-    result += cameraControl.set_sharpness(cameraComponent, params.sharpness);
-    result += cameraControl.set_contrast(cameraComponent, params.contrast);
-    result += cameraControl.set_brightness(cameraComponent, params.brightness);
-    result += cameraControl.set_ISO(cameraComponent, params.ISO);
-    result += cameraControl.set_video_stabilisation(cameraComponent, params.videoStabilisation);
-    result += cameraControl.set_exposure_compensation(cameraComponent, params.exposureCompensation);
-    result += cameraControl.set_exposure_mode(cameraComponent, params.exposureMode);
-    result += cameraControl.set_flicker_avoid_mode(cameraComponent, params.flickerAvoidMode);
-    result += cameraControl.set_metering_mode(cameraComponent, params.exposureMeterMode);
-    result += cameraControl.set_awb_mode(cameraComponent, params.awbMode);
-    result += cameraControl.set_awb_gains(cameraComponent, params.awb_gains_r, params.awb_gains_b);
-    result += cameraControl.set_imageFX(cameraComponent, params.imageEffect);
-    result += cameraControl.set_colourFX(cameraComponent, &params.colourEffects);
-    //result += cameraControl.set_thumbnail_parameters(cameraComponent, &params.thumbnailConfig);  TODO Not working for some reason
-    result += cameraControl.set_rotation(cameraComponent, params.rotation);
-    result += cameraControl.set_flips(cameraComponent, params.hflip, params.vflip);
-    result += cameraControl.set_ROI(cameraComponent, params.roi);
-    result += cameraControl.set_shutter_speed(cameraComponent, params.shutter_speed);
-    result += cameraControl.set_DRC(cameraComponent, params.drc_level);
-    result += cameraControl.set_stats_pass(cameraComponent, params.stats_pass);
-    result += cameraControl.set_annotate(cameraComponent, params.enable_annotate, params.annotate_string,
-                                         params.annotate_text_size,
-                                         params.annotate_text_colour,
-                                         params.annotate_bg_colour,
-                                         params.annotate_justify,
-                                         params.annotate_x,
-                                         params.annotate_y);
-    result += cameraControl.set_gains(cameraComponent, params.analog_gain, params.digital_gain);
-    if(params.settings) {
+    result  = cameraControl.set_saturation(cameraComponent, cameraControl.saturation);
+    result += cameraControl.set_sharpness(cameraComponent, cameraControl.sharpness);
+    result += cameraControl.set_contrast(cameraComponent, cameraControl.contrast);
+    result += cameraControl.set_brightness(cameraComponent, cameraControl.brightness);
+    result += cameraControl.set_ISO(cameraComponent, cameraControl.ISO);
+    result += cameraControl.set_video_stabilisation(cameraComponent, cameraControl.videoStabilisation);
+    result += cameraControl.set_exposure_compensation(cameraComponent, cameraControl.exposureCompensation);
+    result += cameraControl.set_exposure_mode(cameraComponent, cameraControl.exposureMode);
+    result += cameraControl.set_flicker_avoid_mode(cameraComponent, cameraControl.flickerAvoidMode);
+    result += cameraControl.set_metering_mode(cameraComponent, cameraControl.exposureMeterMode);
+    result += cameraControl.set_awb_mode(cameraComponent, cameraControl.awbMode);
+    result += cameraControl.set_awb_gains(cameraComponent, cameraControl.awb_gains_r, cameraControl.awb_gains_b);
+    result += cameraControl.set_imageFX(cameraComponent, cameraControl.imageEffect);
+    result += cameraControl.set_colourFX(cameraComponent, &cameraControl.colourEffects);
+    //result += cameraControl.set_thumbnail_parameters(cameraComponent, &cameraControl.thumbnailConfig);  TODO Not working for some reason
+    result += cameraControl.set_rotation(cameraComponent, cameraControl.rotation);
+    result += cameraControl.set_flips(cameraComponent, cameraControl.hflip, cameraControl.vflip);
+    result += cameraControl.set_ROI(cameraComponent, cameraControl.roi);
+    result += cameraControl.set_shutter_speed(cameraComponent, cameraControl.shutter_speed);
+    result += cameraControl.set_DRC(cameraComponent, cameraControl.drc_level);
+    result += cameraControl.set_stats_pass(cameraComponent, cameraControl.stats_pass);
+    result += cameraControl.set_annotate(cameraComponent, cameraControl.enable_annotate, cameraControl.annotate_string,
+                                         cameraControl.annotate_text_size,
+                                         cameraControl.annotate_text_colour,
+                                         cameraControl.annotate_bg_colour,
+                                         cameraControl.annotate_justify,
+                                         cameraControl.annotate_x,
+                                         cameraControl.annotate_y);
+    result += cameraControl.set_gains(cameraComponent, cameraControl.analog_gain, cameraControl.digital_gain);
+    if(cameraControl.settings) {
         MMAL_PARAMETER_CHANGE_EVENT_REQUEST_T change_event_request = {
             {MMAL_PARAMETER_CHANGE_EVENT_REQUEST, sizeof(MMAL_PARAMETER_CHANGE_EVENT_REQUEST_T)},
             MMAL_PARAMETER_CAMERA_SETTINGS, 1
@@ -267,8 +266,7 @@ PiCamera::setAllParameters() {
 
 
 MMAL_STATUS_T
-PiCamera::setPortFormats(const RASPICAM_CAMERA_PARAMETERS *camera_parameters,
-                         bool fullResPreview,
+PiCamera::setPortFormats(bool fullResPreview,
                          MMAL_FOURCC_T encoding,
                          int width,
                          int height)
@@ -284,14 +282,14 @@ PiCamera::setPortFormats(const RASPICAM_CAMERA_PARAMETERS *camera_parameters,
     format = previewPort->format;
     format->encoding = MMAL_ENCODING_OPAQUE;
     format->encoding_variant = MMAL_ENCODING_I420;
-    if(camera_parameters->shutter_speed > 6000000) {
+    if(cameraControl.shutter_speed > 6000000) {
         MMAL_PARAMETER_FPS_RANGE_T fps_range = {{MMAL_PARAMETER_FPS_RANGE, sizeof(fps_range)},
                                                 { 50, 1000 },
                                                 {166, 1000}
                                                };
         mmal_port_parameter_set(previewPort, &fps_range.hdr);
     }
-    else if(camera_parameters->shutter_speed > 1000000) {
+    else if(cameraControl.shutter_speed > 1000000) {
         MMAL_PARAMETER_FPS_RANGE_T fps_range = {{MMAL_PARAMETER_FPS_RANGE, sizeof(fps_range)},
                                                 { 166, 1000 },
                                                 {999, 1000}
@@ -333,13 +331,13 @@ PiCamera::setPortFormats(const RASPICAM_CAMERA_PARAMETERS *camera_parameters,
 
 // Now set up the Still Port
     format = stillPort->format;
-    if(camera_parameters->shutter_speed > 6000000) {
+    if(cameraControl.shutter_speed > 6000000) {
         MMAL_PARAMETER_FPS_RANGE_T fps_range = {{MMAL_PARAMETER_FPS_RANGE, sizeof(fps_range)},
                                                 { 50, 1000 }, {166, 1000}
                                                };
         mmal_port_parameter_set(stillPort, &fps_range.hdr);
     }
-    else if(camera_parameters->shutter_speed > 1000000) {
+    else if(cameraControl.shutter_speed > 1000000) {
         MMAL_PARAMETER_FPS_RANGE_T fps_range = {{MMAL_PARAMETER_FPS_RANGE, sizeof(fps_range)},
                                                 { 167, 1000 },
                                                 {999, 1000}
