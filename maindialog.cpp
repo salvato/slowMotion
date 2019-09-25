@@ -81,31 +81,8 @@ MainDialog::MainDialog(QWidget *parent)
     pPreview       = new Preview(videoSize.width(), videoSize.height());// Setup preview window defaults
     pCameraControl = new CameraControl(pCamera->component);// Set up the camera_parameters to default
 
-    // set up the camera configuration
-    MMAL_PARAMETER_CAMERA_CONFIG_T camConfig;
-    camConfig.hdr = { MMAL_PARAMETER_CAMERA_CONFIG, sizeof(camConfig) };
-    camConfig.max_stills_w = uint32_t(width); // Max size of stills capture
-    camConfig.max_stills_h = uint32_t(height);
-    camConfig.stills_yuv422 = 0;              // Allow YUV422 stills capture
-    camConfig.one_shot_stills = 1;            // Continuous or one shot stills captures
-    if(fullResPreview) {                // Max size of the preview or video capture frames
-        camConfig.max_preview_video_w = uint32_t(width);
-        camConfig.max_preview_video_h = uint32_t(height);
-    }
-    else{
-        camConfig.max_preview_video_w = uint32_t(pPreview->previewWindow.width);
-        camConfig.max_preview_video_h = uint32_t(pPreview->previewWindow.height);
-    }
-    camConfig.num_preview_video_frames = 3;
-    camConfig.stills_capture_circular_buffer_height = 0;// Sets the height of the circular buffer for stills capture
-    camConfig.fast_preview_resume = 0;
-    camConfig.use_stc_timestamp = MMAL_PARAM_TIMESTAMP_MODE_RESET_STC;
-
-    status = pCamera->setConfig(&camConfig);
-    if(status != MMAL_SUCCESS) {
-        qDebug() << QString("Could not set sensor configuration: error") << status;
+    if(setupCameraConfiguration() != MMAL_SUCCESS)
         exit(EXIT_FAILURE);
-    }
 
     // set up Camera Parameters
     int iResult = pCamera->setAllParameters();
@@ -229,6 +206,34 @@ MainDialog::dumpParameters() {
     qDebug() << QString("GPS output %1")
                 .arg(gps ? "Enabled" : "Disabled");
     qDebug() << endl;
+}
+
+MMAL_STATUS_T
+MainDialog::setupCameraConfiguration() {
+    MMAL_PARAMETER_CAMERA_CONFIG_T camConfig;
+    camConfig.hdr = { MMAL_PARAMETER_CAMERA_CONFIG, sizeof(camConfig) };
+    camConfig.max_stills_w = uint32_t(width); // Max size of stills capture
+    camConfig.max_stills_h = uint32_t(height);
+    camConfig.stills_yuv422 = 0;  // Allow YUV422 stills capture
+    camConfig.one_shot_stills = 1;// Continuous or one shot stills captures
+    if(fullResPreview) {          // Max size of the preview or video capture frames
+        camConfig.max_preview_video_w = uint32_t(width);
+        camConfig.max_preview_video_h = uint32_t(height);
+    }
+    else{
+        camConfig.max_preview_video_w = uint32_t(pPreview->previewWindow.width);
+        camConfig.max_preview_video_h = uint32_t(pPreview->previewWindow.height);
+    }
+    camConfig.num_preview_video_frames = 3;
+    camConfig.stills_capture_circular_buffer_height = 0;// Sets the height of the circular buffer for stills capture
+    camConfig.fast_preview_resume = 0;
+    camConfig.use_stc_timestamp = MMAL_PARAM_TIMESTAMP_MODE_RESET_STC;
+
+    MMAL_STATUS_T status = pCamera->setConfig(&camConfig);
+    if(status != MMAL_SUCCESS) {
+        qDebug() << QString("Could not set sensor configuration: error") << status;
+    }
+    return status;
 }
 
 

@@ -33,6 +33,7 @@ protected:
     bool checkValues();
     bool gpioInit();
     void getSensorDefaults(int camera_num, char *camera_name, int *width, int *height);
+    MMAL_STATUS_T setupCameraConfiguration();
 
 private slots:
     void on_startButton_clicked();
