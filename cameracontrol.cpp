@@ -473,8 +473,8 @@ CameraControl::set_stats_pass(int stats_pass) {
  */
 int
 CameraControl::set_annotate(const int settings, const char *string,
-                             const int text_size, const int text_colour, const int bg_colour,
-                             const unsigned int justify, const unsigned int x, const unsigned int y)
+                            const int text_size, const int text_colour, const int bg_colour,
+                            const unsigned int justify, const unsigned int x, const unsigned int y)
 {
     MMAL_PARAMETER_CAMERA_ANNOTATE_V4_T annotate;
     annotate.hdr.id = MMAL_PARAMETER_ANNOTATE;

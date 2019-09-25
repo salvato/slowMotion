@@ -247,12 +247,12 @@ PiCamera::setAllParameters() {
     result += pControl->set_DRC(pControl->drc_level);
     result += pControl->set_stats_pass(pControl->stats_pass);
     result += pControl->set_annotate(pControl->enable_annotate, pControl->annotate_string,
-                                         pControl->annotate_text_size,
-                                         pControl->annotate_text_colour,
-                                         pControl->annotate_bg_colour,
-                                         pControl->annotate_justify,
-                                         pControl->annotate_x,
-                                         pControl->annotate_y);
+                                     pControl->annotate_text_size,
+                                     pControl->annotate_text_colour,
+                                     pControl->annotate_bg_colour,
+                                     pControl->annotate_justify,
+                                     pControl->annotate_x,
+                                     pControl->annotate_y);
     result += pControl->set_gains(pControl->analog_gain, pControl->digital_gain);
     if(pControl->settings) {
         MMAL_PARAMETER_CHANGE_EVENT_REQUEST_T change_event_request = {

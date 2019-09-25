@@ -84,46 +84,55 @@ MainDialog::MainDialog(QWidget *parent)
     // set up the camera configuration
     MMAL_PARAMETER_CAMERA_CONFIG_T camConfig;
     camConfig.hdr = { MMAL_PARAMETER_CAMERA_CONFIG, sizeof(camConfig) };
-    camConfig.max_stills_w = uint32_t(width);
+    camConfig.max_stills_w = uint32_t(width); // Max size of stills capture
     camConfig.max_stills_h = uint32_t(height);
-    camConfig.stills_yuv422 = 0;
-    camConfig.one_shot_stills = 1;
-    camConfig.max_preview_video_w = uint32_t(pPreview->previewWindow.width);
-    camConfig.max_preview_video_h = uint32_t(pPreview->previewWindow.height);
-    camConfig.num_preview_video_frames = 3;
-    camConfig.stills_capture_circular_buffer_height = 0;
-    camConfig.fast_preview_resume = 0;
-    camConfig.use_stc_timestamp = MMAL_PARAM_TIMESTAMP_MODE_RESET_STC;
-    if(state.fullResPreview) {
+    camConfig.stills_yuv422 = 0;              // Allow YUV422 stills capture
+    camConfig.one_shot_stills = 1;            // Continuous or one shot stills captures
+    if(fullResPreview) {                // Max size of the preview or video capture frames
         camConfig.max_preview_video_w = uint32_t(width);
         camConfig.max_preview_video_h = uint32_t(height);
     }
+    else{
+        camConfig.max_preview_video_w = uint32_t(pPreview->previewWindow.width);
+        camConfig.max_preview_video_h = uint32_t(pPreview->previewWindow.height);
+    }
+    camConfig.num_preview_video_frames = 3;
+    camConfig.stills_capture_circular_buffer_height = 0;// Sets the height of the circular buffer for stills capture
+    camConfig.fast_preview_resume = 0;
+    camConfig.use_stc_timestamp = MMAL_PARAM_TIMESTAMP_MODE_RESET_STC;
+
     status = pCamera->setConfig(&camConfig);
     if(status != MMAL_SUCCESS) {
         qDebug() << QString("Could not set sensor configuration: error") << status;
         exit(EXIT_FAILURE);
     }
+
     // set up Camera Parameters
     int iResult = pCamera->setAllParameters();
     if(iResult != 0) {
         qDebug() << "Unable to set Camera Parameters. error:" << iResult;
         exit(EXIT_FAILURE);
     }
-    status = pCamera->setPortFormats(state.fullResPreview,
-                                     state.encoding,
+
+    // Set up the Camera Port formats
+    status = pCamera->setPortFormats(fullResPreview,
+                                     encoding,
                                      width,
                                      height);
     if(status != MMAL_SUCCESS) {
         qDebug() << "Unable to set Port Formats. error:" << status;
         exit(EXIT_FAILURE);
     }
+
+    pCamera->pControl->set_flips(0, 1);
+    // Enable the Camera processing
     status = pCamera->enableCamera();
     if(status != MMAL_SUCCESS) {
         qDebug() << "Unable to Enable Camera. error:" << status;
         exit(EXIT_FAILURE);
     }
     pCamera->createBufferPool();
-    pCamera->pControl->set_flips(0, 1);
+    imageNum = 0;
 }
 
 
@@ -347,9 +356,7 @@ MainDialog::on_startButton_clicked() {
         pUi->statusBar->setText((QString("Error: Check Values !")));
         return;
     }
-    imageNum = 0;
 
-//TODO:
     intervalTimer.start(msecInterval);
 
     QList<QLineEdit *> widgets = findChildren<QLineEdit *>();

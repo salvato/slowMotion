@@ -10,23 +10,6 @@
 #include "setupdialog.h"
 
 
-// Structure containing all state information for the current run
-typedef struct {
-    int timeout;                        /// Time taken before frame is grabbed and app then shuts down. Units are milliseconds
-    int timelapse;                      /// Delay between each picture in timelapse mode. If 0, disable timelapse
-    int fullResPreview;                 /// If set, the camera preview port runs at capture resolution. Reduces fps.
-    int frameNextMethod;                /// Which method to use to advance to next frame
-    int burstCaptureMode;               /// Enable burst mode
-    MMAL_FOURCC_T encoding;             /// Use a MMAL encoding other than YUV
-    char *linkname;                     /// filename of output file
-
-    MMAL_COMPONENT_T *camera_component;    /// Pointer to the camera component
-    MMAL_COMPONENT_T *null_sink_component; /// Pointer to the camera component
-    MMAL_CONNECTION_T *preview_connection; /// Pointer to the connection from camera to preview
-    MMAL_POOL_T *camera_pool;              /// Pointer to the pool of buffers used by camera stills port
-} APP_STATE;
-
-
 namespace Ui {
 class MainDialog;
 }
@@ -69,11 +52,7 @@ private:
     PiCamera* pCamera;
     Preview* pPreview;
     CameraControl* pCameraControl;
-    APP_STATE state;
-
     setupDialog*    pSetupDlg;
-
-    pid_t pid;
 
     uint   gpioLEDpin;
     uint   panPin;
@@ -111,4 +90,7 @@ private:
     int cameraNum;   /// Camera number
     int sensorMode; /// Sensor mode. 0=auto. Check docs/forum for modes selected by other values.
     int gps;         /// Add real-time gpsd output to output
+
+    int fullResPreview;                 /// If set, the camera preview port runs at capture resolution. Reduces fps.
+    MMAL_FOURCC_T encoding;             /// Use a MMAL encoding other than YUV
 };
