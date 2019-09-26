@@ -20,7 +20,8 @@ CONFIG += c++14
 
 
 SOURCES += main.cpp \
-    utility.cpp
+    utility.cpp \
+    jpegencoder.cpp
 SOURCES += setupdialog.cpp
 SOURCES += picamera.cpp
 SOURCES += maindialog.cpp
@@ -37,7 +38,8 @@ INCLUDEPATH += /usr/local/include
 
 
 HEADERS += maindialog.h \
-    utility.h
+    utility.h \
+    jpegencoder.h
 HEADERS += setupdialog.h
 HEADERS += picamera.h
 HEADERS += preview.h

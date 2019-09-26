@@ -278,12 +278,14 @@ PiCamera::setPortFormats(bool fullResPreview,
     // Utility variables
     MMAL_STATUS_T status;
     MMAL_PORT_T *previewPort = component->output[MMAL_CAMERA_PREVIEW_PORT];
-    MMAL_PORT_T *videoPort   = component->output[MMAL_CAMERA_VIDEO_PORT];
+//    MMAL_PORT_T *videoPort   = component->output[MMAL_CAMERA_VIDEO_PORT]; Not used !!!
     MMAL_PORT_T *stillPort   = component->output[MMAL_CAMERA_CAPTURE_PORT];
     MMAL_ES_FORMAT_T *format;
 
 // Set up the port formats starting from the Preview Port
     format = previewPort->format;
+// With VideoCore OPAQUE image format, image handles are
+// returned to the host but not the actual image data.
     format->encoding = MMAL_ENCODING_OPAQUE;
     format->encoding_variant = MMAL_ENCODING_I420;
     if(pControl->shutter_speed > 6000000) {
@@ -320,7 +322,7 @@ PiCamera::setPortFormats(bool fullResPreview,
         mmal_component_destroy(component);
         return status;
     }
-
+/* ================> Do we need a Video Port ? NO!
 // Now set up the Video Port (which we don't use) with the same format
     mmal_format_full_copy(videoPort->format, format);
     status = mmal_port_format_commit(videoPort);
@@ -332,7 +334,7 @@ PiCamera::setPortFormats(bool fullResPreview,
 // Ensure there are enough buffers to avoid dropping frames
     if(videoPort->buffer_num < VIDEO_OUTPUT_BUFFERS_NUM)
         videoPort->buffer_num = VIDEO_OUTPUT_BUFFERS_NUM;
-
+ ==================> */
 // Now set up the Still Port
     format = stillPort->format;
     if(pControl->shutter_speed > 6000000) {
@@ -349,6 +351,7 @@ PiCamera::setPortFormats(bool fullResPreview,
         mmal_port_parameter_set(stillPort, &fps_range.hdr);
     }
 // Set our format on the Stills Port
+    encoding = MMAL_ENCODING_RGB24;
     if(encoding) {
         format->encoding = encoding;
         if(!mmal_util_rgb_order_fixed(stillPort)) {
@@ -374,12 +377,12 @@ PiCamera::setPortFormats(bool fullResPreview,
     if(stillPort->buffer_size < stillPort->buffer_size_min)
         stillPort->buffer_size = stillPort->buffer_size_min;
     stillPort->buffer_num = stillPort->buffer_num_recommended;
-    status = mmal_port_parameter_set_boolean(videoPort, MMAL_PARAMETER_ZERO_COPY, MMAL_TRUE);
-    if(status != MMAL_SUCCESS) {
-        qDebug() << QString("Failed to select zero copy");
-        mmal_component_destroy(component);
-        return status;
-    }
+//    status = mmal_port_parameter_set_boolean(videoPort, MMAL_PARAMETER_ZERO_COPY, MMAL_TRUE);
+//    if(status != MMAL_SUCCESS) {
+//        qDebug() << QString("Failed to select zero copy");
+//        mmal_component_destroy(component);
+//        return status;
+//    }
     status = mmal_port_format_commit(stillPort);
     if(status != MMAL_SUCCESS ) {
         qDebug() << QString("camera still format couldn't be set");
@@ -449,109 +452,7 @@ PiCamera::start(Preview *pPreview) {
         qDebug() << QString("Failed to setup camera output");
         handleError(status, pPreview);
     }
-/*
-    int frame, keep_looping = 1;
-    FILE *output_file = nullptr;
-    char *use_filename = nullptr;      // Temporary filename while image being written
-    char *final_filename = nullptr;    // Name that file gets once writing complete
-    frame = 0;
-    while(keep_looping) {
-        keep_looping = wait_for_next_frame(&state, &frame);
-        // Open the file
-        if(state.common_settings.filename) {
-            if (state.common_settings.filename[0] == '-') {
-                output_file = stdout;
-                // Ensure we don't upset the output stream with diagnostics/info
-                state.common_settings.verbose = 0;
-            }
-            else {
-                vcos_assert(use_filename == NULL && final_filename == NULL);
-                status = create_filenames(&final_filename, &use_filename, state.common_settings.filename, frame);
-                if (status  != MMAL_SUCCESS) {
-                    qDebug() << QString("Unable to create filenames");
-                    goto error;
-                }
-                if (state.common_settings.verbose)
-                    qDebug() << QString("Opening output file %1").arg(final_filename);
-                // Technically it is opening the temp~ filename which will be renamed
-                // to the final filename
-                output_file = fopen(use_filename, "wb");
-                if (!output_file) {
-                    // Notify user, carry on but discarding encoded output buffers
-                    qDebug() << QString("%1: Error opening output file: %2\nNo output file will be generated")
-                                .arg(__func__)
-                                .arg(use_filename);
-                }
-            }
-            callback_data.file_handle = output_file;
-        }
-        if(output_file) {
-            uint num, q;
-            // There is a possibility that shutter needs to be set each loop.
-            if (mmal_status_to_int(mmal_port_parameter_set_uint32(state.camera_component->control,
-                                                                  MMAL_PARAMETER_SHUTTER_SPEED,
-                                                                  (uint32_t)state.camera_parameters.shutter_speed) != MMAL_SUCCESS))
-                qDebug() << QString("Unable to set shutter speed");
-            // Send all the buffers to the camera output port
-            num = mmal_queue_length(state.camera_pool->queue);
-            for (q=0; q<num; q++) {
-                MMAL_BUFFER_HEADER_T *buffer = mmal_queue_get(state.camera_pool->queue);
-                if (!buffer)
-                    qDebug() << QString("Unable to get a required buffer %d from pool queue", q);
-                if (mmal_port_send_buffer(camera_still_port, buffer)!= MMAL_SUCCESS)
-                    qDebug() << QString("Unable to send a buffer to camera output port (%d)", q);
-            }
-            if (state.burstCaptureMode && frame==1) {
-                mmal_port_parameter_set_boolean(state.camera_component->control,  MMAL_PARAMETER_CAMERA_BURST_CAPTURE, 1);
-            }
-            if(state.camera_parameters.enable_annotate) {
-                if (state.camera_parameters.enable_annotate & ANNOTATE_APP_TEXT)
-                    raspicamcontrol_set_annotate(state.camera_component,
-                                                 state.camera_parameters.enable_annotate,
-                                                 state.camera_parameters.annotate_string,
-                                                 state.camera_parameters.annotate_text_size,
-                                                 state.camera_parameters.annotate_text_colour,
-                                                 state.camera_parameters.annotate_bg_colour,
-                                                 state.camera_parameters.annotate_justify,
-                                                 state.camera_parameters.annotate_x,
-                                                 state.camera_parameters.annotate_y
-                                                 );
-            }
-            if (state.common_settings.verbose)
-                qDebug() << QString("Starting capture %d").arg(frame);
-            if (mmal_port_parameter_set_boolean(camera_still_port, MMAL_PARAMETER_CAPTURE, 1) != MMAL_SUCCESS) {
-                qDebug() << QString("%1: Failed to start capture").arg(__func__);
-            }
-            else {
-                // Wait for capture to complete
-                // For some reason using vcos_semaphore_wait_timeout sometimes returns immediately with bad parameter error
-                // even though it appears to be all correct, so reverting to untimed one until figure out why its erratic
-                vcos_semaphore_wait(&callback_data.complete_semaphore);
-                if (state.common_settings.verbose)
-                    qDebug() << QString("Finished capture %1").arg(frame);
-            }
-            // Ensure we don't die if get callback with no open file
-            callback_data.file_handle = nullptr;
-            if (output_file != stdout) {
-                rename_file(&state, output_file, final_filename, use_filename, frame);
-            }
-            else {
-                fflush(output_file);
-            }
-        }
-        if (use_filename) {
-            free(use_filename);
-            use_filename = nullptr;
-        }
-        if (final_filename) {
-            free(final_filename);
-            final_filename = nullptr;
-        }
-    } // end for (frame)
-    vcos_semaphore_delete(&callback_data.complete_semaphore);
-}
-*/
-    return MMAL_SUCCESS;
+    return status;
 }
 
 
@@ -659,144 +560,4 @@ PiCamera::capture(QString sPathName) {
     }
     fflush(output_file);
 }
-
-
-// *
-// * Create the encoder component, set up its ports
-// *
-// * @param state Pointer to state control struct. encoder_component member set to the created camera_component if successful.
-// *
-// * @return a MMAL_STATUS, MMAL_SUCCESS if all OK, something else otherwise
-
-//static
-//MMAL_STATUS_T create_encoder_component(RASPISTILL_STATE *state) {
-//   MMAL_COMPONENT_T *encoder = nullptr;
-//   MMAL_PORT_T *encoder_input = nullptr;
-//   MMAL_PORT_T *encoder_output = nullptr;
-//   MMAL_STATUS_T status;
-//   MMAL_POOL_T *pool;
-
-//   status = mmal_component_create(MMAL_COMPONENT_DEFAULT_IMAGE_ENCODER, &encoder);
-
-//   if (status != MMAL_SUCCESS) {
-//      vcos_log_error("Unable to create JPEG encoder component");
-//      goto error;
-//   }
-
-//   if (!encoder->input_num || !encoder->output_num) {
-//      status = MMAL_ENOSYS;
-//      vcos_log_error("JPEG encoder doesn't have input/output ports");
-//      goto error;
-//   }
-
-//   encoder_input = encoder->input[0];
-//   encoder_output = encoder->output[0];
-
-//   // We want same format on input and output
-//   mmal_format_copy(encoder_output->format, encoder_input->format);
-
-//   // Specify out output format
-//   encoder_output->format->encoding = state->encoding;
-
-//   encoder_output->buffer_size = encoder_output->buffer_size_recommended;
-
-//   if (encoder_output->buffer_size < encoder_output->buffer_size_min)
-//      encoder_output->buffer_size = encoder_output->buffer_size_min;
-
-//   encoder_output->buffer_num = encoder_output->buffer_num_recommended;
-
-//   if (encoder_output->buffer_num < encoder_output->buffer_num_min)
-//      encoder_output->buffer_num = encoder_output->buffer_num_min;
-
-//   // Commit the port changes to the output port
-//   status = mmal_port_format_commit(encoder_output);
-
-//   if (status != MMAL_SUCCESS) {
-//      vcos_log_error("Unable to set format on video encoder output port");
-//      goto error;
-//   }
-
-//   // Set the JPEG quality level
-//   status = mmal_port_parameter_set_uint32(encoder_output, MMAL_PARAMETER_JPEG_Q_FACTOR, state->quality);
-
-//   if (status != MMAL_SUCCESS) {
-//      vcos_log_error("Unable to set JPEG quality");
-//      goto error;
-//   }
-
-//   // Set the JPEG restart interval
-//   status = mmal_port_parameter_set_uint32(encoder_output, MMAL_PARAMETER_JPEG_RESTART_INTERVAL, state->restart_interval);
-
-//   if (state->restart_interval && status != MMAL_SUCCESS) {
-//      vcos_log_error("Unable to set JPEG restart interval");
-//      goto error;
-//   }
-
-//   // Set up any required thumbnail
-//   {
-//      MMAL_PARAMETER_THUMBNAIL_CONFIG_T param_thumb = {{MMAL_PARAMETER_THUMBNAIL_CONFIGURATION, sizeof(MMAL_PARAMETER_THUMBNAIL_CONFIG_T)}, 0, 0, 0, 0};
-
-//      if(state->thumbnailConfig.enable &&
-//         state->thumbnailConfig.width > 0 &&
-//         state->thumbnailConfig.height > 0)
-//      {
-//         // Have a valid thumbnail defined
-//         param_thumb.enable = 1;
-//         param_thumb.width = state->thumbnailConfig.width;
-//         param_thumb.height = state->thumbnailConfig.height;
-//         param_thumb.quality = state->thumbnailConfig.quality;
-//      }
-//      status = mmal_port_parameter_set(encoder->control, &param_thumb.hdr);
-//   }
-
-//   //  Enable component
-//   status = mmal_component_enable(encoder);
-
-//   if (status  != MMAL_SUCCESS) {
-//      vcos_log_error("Unable to enable video encoder component");
-//      goto error;
-//   }
-
-//   /* Create pool of buffer headers for the output port to consume */
-//   pool = mmal_port_pool_create(encoder_output, encoder_output->buffer_num, encoder_output->buffer_size);
-
-//   if (!pool) {
-//      vcos_log_error("Failed to create buffer header pool for encoder output port %s", encoder_output->name);
-//   }
-
-//   state->encoder_pool = pool;
-//   state->encoder_component = encoder;
-
-//   if (state->common_settings.verbose)
-//      fprintf(stderr, "Encoder component done\n");
-
-//   return status;
-
-//error:
-
-//   if (encoder)
-//      mmal_component_destroy(encoder);
-
-//   return status;
-//}
-
-
-// *
-// * Destroy the encoder component
-// *
-// * @param state Pointer to state control struct
-// *
-
-//static void
-//destroy_encoder_component(RASPISTILL_STATE *state) {
-//   // Get rid of any port buffers first
-//   if (state->encoder_pool) {
-//      mmal_port_pool_destroy(state->encoder_component->output[0], state->encoder_pool);
-//   }
-
-//   if (state->encoder_component) {
-//      mmal_component_destroy(state->encoder_component);
-//      state->encoder_component = NULL;
-//   }
-//}
 

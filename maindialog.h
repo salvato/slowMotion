@@ -6,7 +6,7 @@
 
 #include "picamera.h"
 #include "preview.h"
-#include "cameracontrol.h"
+#include "jpegencoder.h"
 #include "setupdialog.h"
 
 
@@ -50,9 +50,9 @@ private slots:
 
 private:
     Ui::MainDialog* pUi;
-    PiCamera* pCamera;
-    Preview* pPreview;
-    CameraControl* pCameraControl;
+    PiCamera*       pCamera;
+    Preview*        pPreview;
+    JpegEncoder*    pJpegEncoder;
     setupDialog*    pSetupDlg;
 
     uint   gpioLEDpin;

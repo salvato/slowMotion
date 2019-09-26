@@ -79,7 +79,7 @@ MainDialog::MainDialog(QWidget *parent)
 
     pCamera        = new PiCamera(cameraNum, sensorMode);
     pPreview       = new Preview(videoSize.width(), videoSize.height());// Setup preview window defaults
-    pCameraControl = new CameraControl(pCamera->component);// Set up the camera_parameters to default
+    pJpegEncoder   = new JpegEncoder();
 
     if(setupCameraConfiguration() != MMAL_SUCCESS)
         exit(EXIT_FAILURE);

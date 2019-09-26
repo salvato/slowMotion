@@ -55,7 +55,7 @@ CameraControl::set_defaults() {
     stereo_mode.mode      = MMAL_STEREOSCOPIC_MODE_NONE;
     stereo_mode.decimate  = MMAL_FALSE;
     stereo_mode.swap_eyes = MMAL_FALSE;
-    onlyLuma              = MMAL_TRUE;
+    onlyLuma              = MMAL_FALSE;
 }
 
 
