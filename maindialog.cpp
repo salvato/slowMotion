@@ -46,16 +46,15 @@ MainDialog::MainDialog(QWidget *parent)
     dialogPos = pos();
     videoPos  = pUi->labelVideo->pos();
     videoSize = pUi->labelVideo->size();
-
-    setupStyles();// Setup the QLineEdit visual styles
-
+// Setup the QLineEdit visual styles
+    setupStyles();
+// Init GPIO handling
     if(!gpioInit())
         exit(EXIT_FAILURE);
     pSetupDlg = new setupDialog(gpioHostHandle);
-
+// Restore Previous Dialog Values
     restoreSettings();
-
-    // Init User Interface with restored values
+// Init User Interface with restored values
     pUi->pathEdit->setText(sBaseDir);
     pUi->nameEdit->setText(sOutFileName);
     pUi->startButton->setEnabled(true);
@@ -63,35 +62,33 @@ MainDialog::MainDialog(QWidget *parent)
     pUi->intervalEdit->setText(QString("%1").arg(msecInterval));
     pUi->tTimeEdit->setText(QString("%1").arg(secTotTime));
     pUi->labelVideo->setStyleSheet(sBlackStyle);
-
+// Prepare for periodic image acquisition
     switchLampOff();
     intervalTimer.stop();// Probably non needed but...does'nt hurt
     connect(&intervalTimer,
             SIGNAL(timeout()),
             this,
             SLOT(onTimeToGetNewImage()));
-
+// Check for the Pi camera
     getSensorDefaults(cameraNum,
                       cameraName,
                       &width,
                       &height);
     dumpParameters();
-
+// Create the needed components
     pCamera        = new PiCamera(cameraNum, sensorMode);
     pPreview       = new Preview(videoSize.width(), videoSize.height());// Setup preview window defaults
     pJpegEncoder   = new JpegEncoder();
-
+// Set the camera configuration
     if(setupCameraConfiguration() != MMAL_SUCCESS)
         exit(EXIT_FAILURE);
-
-    // set up Camera Parameters
+// Set up Camera Parameters
     int iResult = pCamera->setAllParameters();
     if(iResult != 0) {
         qDebug() << "Unable to set Camera Parameters. error:" << iResult;
         exit(EXIT_FAILURE);
     }
-
-    // Set up the Camera Port formats
+// Set up the Camera Port formats
     status = pCamera->setPortFormats(fullResPreview,
                                      encoding,
                                      width,
@@ -100,14 +97,15 @@ MainDialog::MainDialog(QWidget *parent)
         qDebug() << "Unable to set Port Formats. error:" << status;
         exit(EXIT_FAILURE);
     }
-
+// Vertical Flip of the image
     pCamera->pControl->set_flips(0, 1);
-    // Enable the Camera processing
+// Enable the Camera processing
     status = pCamera->enableCamera();
     if(status != MMAL_SUCCESS) {
         qDebug() << "Unable to Enable Camera. error:" << status;
         exit(EXIT_FAILURE);
     }
+// Create buffer pool
     pCamera->createBufferPool();
     imageNum = 0;
 }
@@ -207,6 +205,7 @@ MainDialog::dumpParameters() {
                 .arg(gps ? "Enabled" : "Disabled");
     qDebug() << endl;
 }
+
 
 MMAL_STATUS_T
 MainDialog::setupCameraConfiguration() {
