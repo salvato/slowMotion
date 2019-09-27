@@ -10,6 +10,7 @@
 
 #include "cameracontrol.h"
 #include "preview.h"
+#include "jpegencoder.h"
 
 #include <stdio.h>
 #include <QString>
@@ -50,7 +51,7 @@ public:
     void createBufferPool();
     int setAllParameters();
     void destroyComponent();
-    MMAL_STATUS_T start(Preview* pPreview);
+    MMAL_STATUS_T start(Preview* pPreview, JpegEncoder* pEncoder);
     void stop();
     void capture(QString sPathName);
 
@@ -68,4 +69,5 @@ protected:
 
 private:
     MMAL_CONNECTION_T *previewConnection;
+    MMAL_CONNECTION_T *encoderConnection;
 };

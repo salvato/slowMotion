@@ -369,7 +369,7 @@ MainDialog::on_startButton_clicked() {
     pUi->setupButton->setDisabled(true);
     pUi->startButton->setDisabled(true);
     pUi->stopButton->setEnabled(true);
-    pCamera->start(pPreview);
+    pCamera->start(pPreview, pJpegEncoder);
 }
 
 
