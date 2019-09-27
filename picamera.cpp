@@ -27,7 +27,7 @@ static PORT_USERDATA callbackData;
  * @param Callback data
  */
 void
-default_camera_control_callback(MMAL_PORT_T *port, MMAL_BUFFER_HEADER_T *buffer) {
+defaultCameraControlCallback(MMAL_PORT_T *port, MMAL_BUFFER_HEADER_T *buffer) {
     qDebug() << QString("Camera control callback  cmd=0x%1x\nPort:%2")
                 .arg(buffer->cmd, 8, 16, QLatin1Char('0'))
                 .arg(port->name);
@@ -200,7 +200,7 @@ MMAL_STATUS_T
 PiCamera::setCallback() {
     MMAL_STATUS_T status;
     // Enable the camera, and tell it its control callback function
-    status = mmal_port_enable(component->control, default_camera_control_callback);
+    status = mmal_port_enable(component->control, defaultCameraControlCallback);
     if(status != MMAL_SUCCESS ){
         qDebug() << QString("Unable to enable control port : error %1").arg(status);
         destroyComponent();
@@ -428,7 +428,7 @@ PiCamera::start(Preview *pPreview) {
 // Note we are lucky that the preview and null sink components use the same
 // input port so we can simple do this without conditionals
     MMAL_STATUS_T status;
-    MMAL_PORT_T *preview_input_port  = pPreview->previewComponent->input[0];
+    MMAL_PORT_T *preview_input_port  = pPreview->pComponent->input[0];
     MMAL_PORT_T *previewPort = component->output[MMAL_CAMERA_PREVIEW_PORT];
 // Connect camera to preview (which might be a null_sink if no preview required)
     status = connectPorts(previewPort, preview_input_port, &previewConnection);
@@ -488,8 +488,8 @@ PiCamera::handleError(MMAL_STATUS_T status, Preview *pPreview) {
     if(previewConnection)
         mmal_connection_destroy(previewConnection);
     // Disable components
-    if(pPreview->previewComponent)
-        mmal_component_disable(pPreview->previewComponent);
+    if(pPreview->pComponent)
+        mmal_component_disable(pPreview->pComponent);
     if(component)
         mmal_component_disable(component);
     pPreview->destroy();

@@ -124,3 +124,31 @@ checkConfiguration(int min_gpu_mem) {
         qDebug() << QString("Failed to run camera app. Please check for firmware updates\n");
 }
 
+/*
+    int gpu_mem = get_mem_gpu();
+    int supported = 0, detected = 0;
+    get_camera(&supported, &detected);
+    if(!supported) {
+        qDebug() << QString("Camera is not enabled in this build:");
+        qDebug() << QString("Try running \"sudo raspi-config\"");
+        qDebug() << QString("and ensure that \"camera\" has been enabled");
+        exit(EXIT_FAILURE);
+    }
+    else if(gpu_mem < min_gpu_mem) {
+        qDebug() << QString("Only %1M of gpu_mem is configured.")
+                    .arg(gpu_mem);
+        qDebug() << QString("Try running \"sudo raspi-config\" and ensure that \"memory_split\"");
+        qDebug() << QString("has a value of %2 or greater")
+                    .arg(min_gpu_mem);
+        exit(EXIT_FAILURE);
+    }
+    else if(!detected) {
+        qDebug() << QString("Camera is not detected.");
+        qDebug() << QString("Please check carefully the camera module is installed correctly");
+        exit(EXIT_FAILURE);
+    }
+    else {
+        qDebug() << QString("Failed to run camera app. Please check for firmware updates");
+        exit(EXIT_FAILURE);
+    }
+ */

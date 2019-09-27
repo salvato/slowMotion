@@ -75,7 +75,7 @@ MainDialog::MainDialog(QWidget *parent)
                       &width,
                       &height);
     dumpParameters();
-// Create the needed components
+// Create the needed Components
     pCamera        = new PiCamera(cameraNum, sensorMode);
     pPreview       = new Preview(videoSize.width(), videoSize.height());// Setup preview window defaults
     pJpegEncoder   = new JpegEncoder();
@@ -262,7 +262,6 @@ MainDialog::switchLampOff() {
     pUi->lampStatus->setStyleSheet(sDarkStyle);
     repaint();
 }
-
 
 
 bool
