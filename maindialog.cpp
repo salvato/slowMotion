@@ -70,10 +70,7 @@ MainDialog::MainDialog(QWidget *parent)
             this,
             SLOT(onTimeToGetNewImage()));
 // Check for the Pi camera
-    getSensorDefaults(cameraNum,
-                      cameraName,
-                      &width,
-                      &height);
+    getSensorDefaults(cameraNum, cameraName, &width, &height);
     dumpParameters();
 // Create the needed Components
     pCamera        = new PiCamera(cameraNum, sensorMode);
@@ -82,8 +79,9 @@ MainDialog::MainDialog(QWidget *parent)
 // Set the camera configuration
     if(setupCameraConfiguration() != MMAL_SUCCESS)
         exit(EXIT_FAILURE);
-// Set up Camera Parameters
-    int iResult = pCamera->setAllParameters();
+    initDefaults();
+// Set up default Camera Parameters
+    int iResult = setDefaultParameters();
     if(iResult != 0) {
         qDebug() << "Unable to set Camera Parameters. error:" << iResult;
         exit(EXIT_FAILURE);
@@ -176,14 +174,105 @@ MainDialog::moveEvent(QMoveEvent *event) {
 void
 MainDialog::restoreSettings() {
     QSettings settings;
-    // Restore settings
-    sBaseDir        = settings.value("BaseDir",
-                                     QStandardPaths::writableLocation(QStandardPaths::PicturesLocation)).toString();
-    sOutFileName    = settings.value("FileName",
-                                     QString("test")).toString();
-    msecInterval    = settings.value("Interval", 10000).toInt();
-    secTotTime      = settings.value("TotalTime", 0).toInt();
+    sBaseDir     = settings.value("BaseDir",
+                                  QStandardPaths::writableLocation(QStandardPaths::PicturesLocation)).toString();
+    sOutFileName = settings.value("FileName",
+                                  QString("test")).toString();
+    msecInterval = settings.value("Interval", 10000).toInt();
+    secTotTime   = settings.value("TotalTime", 0).toInt();
 
+}
+
+
+int
+MainDialog::setDefaultParameters() {
+    int result;
+    CameraControl* pCameraControl = pCamera->pControl;
+    result  = pCameraControl->set_saturation(saturation);
+    result += pCameraControl->set_sharpness(sharpness);
+    result += pCameraControl->set_contrast(contrast);
+    result += pCameraControl->set_brightness(brightness);
+    result += pCameraControl->set_ISO(ISO);
+    result += pCameraControl->set_video_stabilisation(videoStabilisation);
+    result += pCameraControl->set_exposure_compensation(exposureCompensation);
+    result += pCameraControl->set_exposure_mode(exposureMode);
+    result += pCameraControl->set_flicker_avoid_mode(flickerAvoidMode);
+    result += pCameraControl->set_metering_mode(exposureMeterMode);
+    result += pCameraControl->set_awb_mode(awbMode);
+    result += pCameraControl->set_awb_gains(awb_gains_r, awb_gains_b);
+    result += pCameraControl->set_imageFX(imageEffect);
+    result += pCameraControl->set_colourFX(&colourEffects);
+    //result += pCameraControl->set_thumbnail_parameters(&thumbnailConfig);  TODO Not working for some reason
+    result += pCameraControl->set_rotation(rotation);
+    result += pCameraControl->set_flips(hflip, vflip);
+    result += pCameraControl->set_ROI(roi);
+    result += pCameraControl->set_shutter_speed(shutter_speed);
+    result += pCameraControl->set_DRC(drc_level);
+    result += pCameraControl->set_stats_pass(stats_pass);
+    result += pCameraControl->set_annotate(enable_annotate,
+                                           annotate_string,
+                                           annotate_text_size,
+                                           annotate_text_colour,
+                                           annotate_bg_colour,
+                                           annotate_justify,
+                                           annotate_x,
+                                           annotate_y);
+    result += pCameraControl->set_gains(analog_gain, digital_gain);
+    if(settings) {
+        MMAL_PARAMETER_CHANGE_EVENT_REQUEST_T change_event_request = {
+            {MMAL_PARAMETER_CHANGE_EVENT_REQUEST, sizeof(MMAL_PARAMETER_CHANGE_EVENT_REQUEST_T)},
+            MMAL_PARAMETER_CAMERA_SETTINGS, 1
+        };
+        MMAL_STATUS_T status = mmal_port_parameter_set(pCamera->component->control, &change_event_request.hdr);
+        if(status != MMAL_SUCCESS) {
+            qDebug() << QString("No camera settings events");
+        }
+        result += status;
+    }
+    return result;
+}
+
+
+///  Give the supplied parameter block a set of default values
+///  @param Pointer to parameter block
+void
+MainDialog::initDefaults() {
+    sharpness             = 0;
+    contrast              = 0;
+    brightness            = 50;
+    saturation            = 0;
+    ISO                   = 0;// 0 = auto
+    videoStabilisation    = 0;
+    exposureCompensation  = 0;
+    exposureMode          = MMAL_PARAM_EXPOSUREMODE_AUTO;
+    flickerAvoidMode      = MMAL_PARAM_FLICKERAVOID_OFF;
+    exposureMeterMode     = MMAL_PARAM_EXPOSUREMETERINGMODE_AVERAGE;
+    awbMode               = MMAL_PARAM_AWBMODE_AUTO;
+    imageEffect           = MMAL_PARAM_IMAGEFX_NONE;
+    colourEffects.enable  = 0;
+    colourEffects.u       = 128;
+    colourEffects.v       = 128;
+    rotation              = 0;
+    hflip                 = 0;
+    vflip                 = 0;
+    roi.x                 = 0.0;
+    roi.y                 = 0.0;
+    roi.w                 = 1.0;
+    roi.h                 = 1.0;
+    shutter_speed         = 0;// 0 = auto
+    awb_gains_r           = 0;// Only have any function if AWB OFF is used.
+    awb_gains_b           = 0;
+    drc_level             = MMAL_PARAMETER_DRC_STRENGTH_OFF;
+    stats_pass            = MMAL_FALSE;
+    enable_annotate       = 0;
+    annotate_string[0]    = '\0';
+    annotate_text_size    = 0; //Use firmware default
+    annotate_text_colour  =-1;//Use firmware default
+    annotate_bg_colour    =-1;//Use firmware default
+    stereo_mode.mode      = MMAL_STEREOSCOPIC_MODE_NONE;
+    stereo_mode.decimate  = MMAL_FALSE;
+    stereo_mode.swap_eyes = MMAL_FALSE;
+    onlyLuma              = MMAL_FALSE;
 }
 
 

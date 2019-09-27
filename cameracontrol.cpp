@@ -12,50 +12,6 @@
 CameraControl::CameraControl(MMAL_COMPONENT_T *pCameraComponent)
     : pComponent(pCameraComponent)
 {
-    set_defaults();
-}
-
-
-///  Give the supplied parameter block a set of default values
-///  @param Pointer to parameter block
-void
-CameraControl::set_defaults() {
-    sharpness             = 0;
-    contrast              = 0;
-    brightness            = 50;
-    saturation            = 0;
-    ISO                   = 0;// 0 = auto
-    videoStabilisation    = 0;
-    exposureCompensation  = 0;
-    exposureMode          = MMAL_PARAM_EXPOSUREMODE_AUTO;
-    flickerAvoidMode      = MMAL_PARAM_FLICKERAVOID_OFF;
-    exposureMeterMode     = MMAL_PARAM_EXPOSUREMETERINGMODE_AVERAGE;
-    awbMode               = MMAL_PARAM_AWBMODE_AUTO;
-    imageEffect           = MMAL_PARAM_IMAGEFX_NONE;
-    colourEffects.enable  = 0;
-    colourEffects.u       = 128;
-    colourEffects.v       = 128;
-    rotation              = 0;
-    hflip                 = 0;
-    vflip                 = 0;
-    roi.x                 = 0.0;
-    roi.y                 = 0.0;
-    roi.w                 = 1.0;
-    roi.h                 = 1.0;
-    shutter_speed         = 0;// 0 = auto
-    awb_gains_r           = 0;// Only have any function if AWB OFF is used.
-    awb_gains_b           = 0;
-    drc_level             = MMAL_PARAMETER_DRC_STRENGTH_OFF;
-    stats_pass            = MMAL_FALSE;
-    enable_annotate       = 0;
-    annotate_string[0]    = '\0';
-    annotate_text_size    = 0; //Use firmware default
-    annotate_text_colour  = -1;//Use firmware default
-    annotate_bg_colour    = -1;//Use firmware default
-    stereo_mode.mode      = MMAL_STEREOSCOPIC_MODE_NONE;
-    stereo_mode.decimate  = MMAL_FALSE;
-    stereo_mode.swap_eyes = MMAL_FALSE;
-    onlyLuma              = MMAL_FALSE;
 }
 
 
@@ -435,6 +391,25 @@ CameraControl::set_shutter_speed(int speed) {
 }
 
 
+uint32_t
+CameraControl::get_shutter_speed() {
+    if(!pComponent) {
+        qDebug() << QString("%1: Component not existing").arg(__func__);
+        exit(EXIT_FAILURE);
+    }
+    uint32_t shutterSpeed;
+    MMAL_STATUS_T status =  mmal_port_parameter_get_uint32(pComponent->control, MMAL_PARAMETER_SHUTTER_SPEED, &shutterSpeed);
+    if(status != MMAL_SUCCESS) {
+        qDebug() << QString("%1: Unable to get Shutter Speed: (%2)")
+                    .arg(__func__)
+                    .arg(mmal_status_to_int(status));
+        exit(EXIT_FAILURE);
+    }
+    return shutterSpeed;
+}
+
+
+
 /**
  * Adjust the Dynamic range compression level
  * @param camera Pointer to camera component
@@ -648,5 +623,3 @@ CameraControl::set_stereo_mode(MMAL_PORT_T *port, MMAL_PARAMETER_STEREOSCOPIC_MO
     }
     return mmal_status_to_int(mmal_port_parameter_set(port, &stereo.hdr));
 }
-
-

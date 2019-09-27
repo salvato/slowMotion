@@ -34,6 +34,8 @@ protected:
     bool gpioInit();
     void getSensorDefaults(int camera_num, char *camera_name, int *width, int *height);
     MMAL_STATUS_T setupCameraConfiguration();
+    void initDefaults();
+    int setDefaultParameters();
 
 private slots:
     void on_startButton_clicked();
@@ -91,6 +93,43 @@ private:
     int cameraNum;   /// Camera number
     int sensorMode; /// Sensor mode. 0=auto. Check docs/forum for modes selected by other values.
     int gps;         /// Add real-time gpsd output to output
+
+    int sharpness;             /// -100 to 100
+    int contrast;              /// -100 to 100
+    int brightness;            ///    0 to 100
+    int saturation;            /// -100 to 100
+    int ISO;                   ///  TODO : what range?
+    int videoStabilisation;    /// 0 or 1 (false or true)
+    int exposureCompensation;  ///  -10 to +10 ?
+    MMAL_PARAM_EXPOSUREMODE_T exposureMode;
+    MMAL_PARAM_EXPOSUREMETERINGMODE_T exposureMeterMode;
+    MMAL_PARAM_AWBMODE_T awbMode;
+    MMAL_PARAM_IMAGEFX_T imageEffect;
+    MMAL_PARAMETER_IMAGEFX_PARAMETERS_T imageEffectsParameters;
+    MMAL_PARAM_COLOURFX_T colourEffects;
+    MMAL_PARAM_FLICKERAVOID_T flickerAvoidMode;
+    int rotation;              /// 0-359
+    int hflip;                 /// 0 or 1
+    int vflip;                 /// 0 or 1
+    PARAM_FLOAT_RECT_T  roi;   /// region of interest to use on the sensor. Normalised [0,1] values in the rect
+    int shutter_speed;         /// 0 = auto, otherwise the shutter speed in ms
+    float awb_gains_r;         /// AWB red gain
+    float awb_gains_b;         /// AWB blue gain
+    MMAL_PARAMETER_DRC_STRENGTH_T drc_level;  /// Strength of Dynamic Range compression to apply
+    MMAL_BOOL_T stats_pass;    /// Stills capture statistics pass on/off
+    int enable_annotate;       /// Flag to enable the annotate, 0 = disabled, otherwise a bitmask of what needs to be displayed
+    char annotate_string[MMAL_CAMERA_ANNOTATE_MAX_TEXT_LEN_V2]; /// String to use for annotate - overrides certain bitmask settings
+    int annotate_text_size;    /// Text size for annotation
+    int annotate_text_colour;  /// Text colour for annotation
+    int annotate_bg_colour;    /// Background colour for annotation
+    unsigned int annotate_justify;
+    unsigned int annotate_x;
+    unsigned int annotate_y;
+    MMAL_PARAMETER_STEREOSCOPIC_MODE_T stereo_mode;
+    float analog_gain;         /// Analog gain
+    float digital_gain;        /// Digital gain
+    int settings;
+    int onlyLuma;              /// Only output the luma / Y plane of the YUV data
 
     int fullResPreview;                 /// If set, the camera preview port runs at capture resolution. Reduces fps.
     MMAL_FOURCC_T encoding;             /// Use a MMAL encoding other than YUV

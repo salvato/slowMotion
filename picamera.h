@@ -49,7 +49,6 @@ public:
                                  int height);
     MMAL_STATUS_T enableCamera();
     void createBufferPool();
-    int setAllParameters();
     void destroyComponent();
     MMAL_STATUS_T start(Preview* pPreview, JpegEncoder* pEncoder);
     void stop();
