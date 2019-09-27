@@ -41,7 +41,6 @@ class PiCamera
 public:
     PiCamera(int cameraNum, int sensorMode);
     ~PiCamera();
-    MMAL_STATUS_T setCallback();
     MMAL_STATUS_T setConfig(MMAL_PARAMETER_CAMERA_CONFIG_T* pCam_config);
     MMAL_STATUS_T setPortFormats(bool fullResPreview,
                                  MMAL_FOURCC_T encoding,

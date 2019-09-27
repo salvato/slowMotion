@@ -247,19 +247,6 @@ PiCamera::destroyComponent() {
 
 
 MMAL_STATUS_T
-PiCamera::setCallback() {
-    MMAL_STATUS_T status;
-    // Enable the camera, and tell it its control callback function
-    status = mmal_port_enable(component->control, defaultCameraControlCallback);
-    if(status != MMAL_SUCCESS ){
-        qDebug() << QString("Unable to enable control port : error %1").arg(status);
-        destroyComponent();
-    }
-    return status;
-}
-
-
-MMAL_STATUS_T
 PiCamera::setConfig(MMAL_PARAMETER_CAMERA_CONFIG_T* pCam_config) {
     MMAL_STATUS_T status;
     status = mmal_port_parameter_set(component->control, &pCam_config->hdr);
@@ -432,7 +419,7 @@ PiCamera::start(Preview *pPreview, JpegEncoder *pEncoder) {
        qDebug() << QString("Enabling encoder output port");
     // Enable the Encoder output port and tell it its callback function
     status = mmal_port_enable(encoderOutputPort, encoderBufferCallback);
-    if (status != MMAL_SUCCESS) {
+    if(status != MMAL_SUCCESS) {
         qDebug() << QString("Failed to setup camera output");
         handleError(status, pPreview);
     }
@@ -444,10 +431,10 @@ PiCamera::start(Preview *pPreview, JpegEncoder *pEncoder) {
     uint32_t num = mmal_queue_length(pEncoder->pool->queue);
     for(uint32_t q=0; q<num; q++) {
        MMAL_BUFFER_HEADER_T *buffer = mmal_queue_get(pEncoder->pool->queue);
-       if (!buffer)
+       if(!buffer)
           qDebug() << QString("Unable to get a required buffer %1 from pool queue")
                       .arg(q);
-       if (mmal_port_send_buffer(encoderOutputPort, buffer)!= MMAL_SUCCESS)
+       if(mmal_port_send_buffer(encoderOutputPort, buffer)!= MMAL_SUCCESS)
           qDebug() << QString("Unable to send a buffer to encoder output port (%1)")
                       .arg(q);
     }
@@ -455,11 +442,13 @@ PiCamera::start(Preview *pPreview, JpegEncoder *pEncoder) {
 }
 
 
-/// Connect two specific ports together
-/// @param output_port Pointer the output port
-/// @param input_port Pointer the input port
-/// @param connection Pointer to a mmal connection pointer, reassigned if function successful
-/// Returns a MMAL_STATUS_T giving result of operation
+/**
+ * Connect two specific ports together
+ * @param output_port Pointer the output port
+ * @param input_port Pointer the input port
+ * @param connection Pointer to a mmal connection pointer, reassigned if function successful
+ * Returns a MMAL_STATUS_T giving result of operation
+ */
 MMAL_STATUS_T
 PiCamera::connectPorts(MMAL_PORT_T *output_port, MMAL_PORT_T *input_port, MMAL_CONNECTION_T **connection) {
    MMAL_STATUS_T status;
