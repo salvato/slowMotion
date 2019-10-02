@@ -114,7 +114,6 @@ JpegEncoder::createComponent() {
 
 void
 JpegEncoder::createBufferPool() {
-    MMAL_STATUS_T status;
     // Create pool of buffer headers for the output port to consume
     MMAL_PORT_T *outputPort = pComponent->output[0];
 
@@ -125,6 +124,7 @@ JpegEncoder::createBufferPool() {
     if(!pool) {
         qDebug() << QString("Failed to create buffer header pool for encoder output port %1")
                     .arg(outputPort->name);
+        exit(EXIT_FAILURE);
     }
 }
 
