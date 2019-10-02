@@ -14,7 +14,7 @@
 typedef struct {
     FILE *file_handle;                   /// File handle to write buffer data to.
     VCOS_SEMAPHORE_T complete_semaphore; /// semaphore which is posted when we reach end of frame (indicates end of capture or fault)
-    PiCamera *pCamera;                   /// pointer to our camera in case required in callback
+    void *pSource;                       /// pointer to our camera in case required in callback
 } PORT_USERDATA;
 
 
@@ -100,7 +100,8 @@ cameraBufferCallback(MMAL_PORT_T *port, MMAL_BUFFER_HEADER_T *buffer) {
     // and send one back to the port (if still open)
     if(port->is_enabled) {
         MMAL_STATUS_T status = MMAL_SUCCESS;
-        MMAL_BUFFER_HEADER_T *new_buffer = mmal_queue_get(pData->pCamera->pool->queue);
+        PiCamera* pCamera = reinterpret_cast<PiCamera*>(pData->pSource);
+        MMAL_BUFFER_HEADER_T *new_buffer = mmal_queue_get(pCamera->pool->queue);
         // and back to the port from there.
         if(new_buffer) {
             status = mmal_port_send_buffer(port, new_buffer);
@@ -152,15 +153,15 @@ encoderBufferCallback(MMAL_PORT_T *port, MMAL_BUFFER_HEADER_T *buffer) {
    // and send one back to the port (if still open)
    if(port->is_enabled) {
       MMAL_STATUS_T status = MMAL_SUCCESS;
-      MMAL_BUFFER_HEADER_T *new_buffer;
-      new_buffer = mmal_queue_get(pData->pCamera->pool->queue);
+      JpegEncoder* pEncoder = reinterpret_cast<JpegEncoder*>(pData->pSource);
+      MMAL_BUFFER_HEADER_T *new_buffer = mmal_queue_get(pEncoder->pool->queue);
       if(new_buffer) {
          status = mmal_port_send_buffer(port, new_buffer);
       }
       if(!new_buffer || status != MMAL_SUCCESS)
          qDebug() << QString("Unable to return a buffer to the encoder port");
    }
-   if (complete)
+   if(complete)
       vcos_semaphore_post(&(pData->complete_semaphore));
 }
 
@@ -389,19 +390,24 @@ PiCamera::createBufferPool() {
 
 
 MMAL_STATUS_T
-PiCamera::start(Preview *pPreview, JpegEncoder *pEncoder) {
+PiCamera::startPreview(Preview *pPreview) {
+    if(!pPreview) return MMAL_ENOTREADY;
     MMAL_STATUS_T status;
-    // Connect camera to preview (which might be a null_sink if no preview required)
+// Connect Camera to Preview
     MMAL_PORT_T *previewInputPort  = pPreview->pComponent->input[0];
     MMAL_PORT_T *cameraPreviewPort = component->output[MMAL_CAMERA_PREVIEW_PORT];
     status = connectPorts(cameraPreviewPort, previewInputPort, &previewConnection);
     if(status != MMAL_SUCCESS) {
         mmal_status_to_int(status);
         qDebug() << QString("%1: Failed to connect camera to preview").arg(__func__);
-        handleError(status, pPreview);
-        return status;
     }
+    return status;
+}
 
+
+MMAL_STATUS_T
+PiCamera::start(Preview *pPreview, JpegEncoder *pEncoder) {
+    MMAL_STATUS_T status;
     MMAL_PORT_T* cameraStillPort   = component->output[MMAL_CAMERA_CAPTURE_PORT];
     MMAL_PORT_T* encoderInputPort  = pEncoder->pComponent->input[0];
     if(verbose)
@@ -417,26 +423,31 @@ PiCamera::start(Preview *pPreview, JpegEncoder *pEncoder) {
     MMAL_PORT_T* encoderOutputPort = pEncoder->pComponent->output[0];
     if(verbose)
        qDebug() << QString("Enabling encoder output port");
+    // Set up our userdata passed through to the callback
+    callbackData.file_handle  = nullptr; // Null until we open our filename
+    callbackData.pSource      = pEncoder;
+    encoderOutputPort->userdata = reinterpret_cast<struct MMAL_PORT_USERDATA_T *>(&callbackData);
     // Enable the Encoder output port and tell it its callback function
     status = mmal_port_enable(encoderOutputPort, encoderBufferCallback);
     if(status != MMAL_SUCCESS) {
         qDebug() << QString("Failed to setup camera output");
-        handleError(status, pPreview);
+        exit(EXIT_FAILURE);
     }
-    // Set up our userdata passed through to the callback
-    callbackData.file_handle  = nullptr; // Null until we open our filename
-    callbackData.pCamera      = this;
-    encoderOutputPort->userdata = reinterpret_cast<struct MMAL_PORT_USERDATA_T *>(&callbackData);
     // Send all the buffers to the encoder output port
     uint32_t num = mmal_queue_length(pEncoder->pool->queue);
     for(uint32_t q=0; q<num; q++) {
-       MMAL_BUFFER_HEADER_T *buffer = mmal_queue_get(pEncoder->pool->queue);
-       if(!buffer)
-          qDebug() << QString("Unable to get a required buffer %1 from pool queue")
-                      .arg(q);
-       if(mmal_port_send_buffer(encoderOutputPort, buffer)!= MMAL_SUCCESS)
-          qDebug() << QString("Unable to send a buffer to encoder output port (%1)")
-                      .arg(q);
+        MMAL_BUFFER_HEADER_T *buffer = mmal_queue_get(pEncoder->pool->queue);
+        if(!buffer)
+            qDebug() << QString("Unable to get a required buffer %1 from pool queue")
+                        .arg(q);
+        status = mmal_port_send_buffer(encoderOutputPort, buffer);
+        if(status != MMAL_SUCCESS) {
+            mmal_status_to_int(status);
+            qDebug() << QString("%1: Unable to send a buffer to encoder output port (%2)")
+                        .arg(__func__)
+                        .arg(q);
+            exit(EXIT_FAILURE);
+        }
     }
     return status;
 }
@@ -492,23 +503,27 @@ PiCamera::handleError(MMAL_STATUS_T status, Preview *pPreview) {
 /// @param port Pointer the port
 void
 PiCamera::checkDisablePort(MMAL_PORT_T *port) {
-   if(port && port->is_enabled)
-      mmal_port_disable(port);
+   if(port && port->is_enabled) {
+      MMAL_STATUS_T status = mmal_port_disable(port);
+       if(status != MMAL_SUCCESS) {
+          qDebug() << QString("%1: Failed to disable the connected port")
+                      .arg(__func__);
+          exit(EXIT_FAILURE);
+       }
+   }
 }
 
 
 void
-PiCamera::stop() {
-    MMAL_PORT_T *cameraPreviewPort = component->output[MMAL_CAMERA_PREVIEW_PORT];
-    checkDisablePort(cameraPreviewPort);
-    if(previewConnection)
-        mmal_connection_destroy(previewConnection);
-    previewConnection = nullptr;
-    MMAL_PORT_T *cameraStillPort = component->output[MMAL_CAMERA_CAPTURE_PORT];
-    checkDisablePort(cameraStillPort);
-    if(encoderConnection)
-        mmal_connection_destroy(encoderConnection);
-    encoderConnection = nullptr;
+PiCamera::stop(JpegEncoder *pEncoder) {
+    MMAL_PORT_T* encoderOutputPort = pEncoder->pComponent->output[0];
+    checkDisablePort(encoderOutputPort);
+    MMAL_STATUS_T status = mmal_connection_release(encoderConnection);
+    if(status != MMAL_SUCCESS) {
+       qDebug() << QString("%1: Failed to release the connection between camera port and encoder input")
+                   .arg(__func__);
+       exit(EXIT_FAILURE);
+    }
     if(verbose)
         qDebug() << QString("Disabling camera still output port");
 }

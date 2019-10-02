@@ -69,18 +69,18 @@ MainDialog::MainDialog(QWidget *parent)
             SIGNAL(timeout()),
             this,
             SLOT(onTimeToGetNewImage()));
-// Check for the Pi camera
+// Check for the presence of the Pi Camera
     getSensorDefaults(cameraNum, cameraName, &width, &height);
     dumpParameters();
 // Create the needed Components
     pCamera        = new PiCamera(cameraNum, sensorMode);
     pPreview       = new Preview(videoSize.width(), videoSize.height());// Setup preview window defaults
     pJpegEncoder   = new JpegEncoder();
-// Set the camera configuration
+// Set up the Camera Configuration
     if(setupCameraConfiguration() != MMAL_SUCCESS)
         exit(EXIT_FAILURE);
-    initDefaults();
 // Set up default Camera Parameters
+    initDefaults();
     int iResult = setDefaultParameters();
     if(iResult != 0) {
         qDebug() << "Unable to set Camera Parameters. error:" << iResult;
@@ -97,14 +97,20 @@ MainDialog::MainDialog(QWidget *parent)
     }
 // Vertical Flip of the image
     pCamera->pControl->set_flips(0, 1);
+    // Enable the Camera processing
+        status = pCamera->enableCamera();
+        if(status != MMAL_SUCCESS) {
+            qDebug() << "Unable to Enable Camera. error:" << status;
+            exit(EXIT_FAILURE);
+        }
 // Enable the Camera processing
-    status = pCamera->enableCamera();
+    status = pCamera->startPreview(pPreview);
     if(status != MMAL_SUCCESS) {
-        qDebug() << "Unable to Enable Camera. error:" << status;
+        qDebug() << "Unable to Start Camera Preview. error:" << status;
         exit(EXIT_FAILURE);
     }
 // Create buffer pool
-    pCamera->createBufferPool();
+//    pCamera->createBufferPool();
     imageNum = 0;
 }
 
@@ -233,8 +239,7 @@ MainDialog::setDefaultParameters() {
 }
 
 
-///  Give the supplied parameter block a set of default values
-///  @param Pointer to parameter block
+//  Give a set of default values
 void
 MainDialog::initDefaults() {
     sharpness             = 0;
@@ -441,7 +446,6 @@ MainDialog::getSensorDefaults(int camera_num, char *camera_name, int *width, int
 }
 
 
-
 void
 MainDialog::on_startButton_clicked() {
     if(!checkValues()) {
@@ -465,7 +469,7 @@ MainDialog::on_startButton_clicked() {
 void
 MainDialog::on_stopButton_clicked() {
     intervalTimer.stop();
-    pCamera->stop();
+    pCamera->stop(pJpegEncoder);
     switchLampOff();
     QList<QLineEdit *> widgets = findChildren<QLineEdit *>();
     for(int i=0; i<widgets.size(); i++) {

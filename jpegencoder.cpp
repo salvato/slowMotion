@@ -1,5 +1,6 @@
 #include "jpegencoder.h"
 #include "QDebug"
+#include "utility.h"
 
 
 #include "interface/mmal/mmal_buffer.h"
@@ -16,6 +17,7 @@ JpegEncoder::JpegEncoder()
     encoding = MMAL_ENCODING_JPEG;
     if(createComponent() != MMAL_SUCCESS)
         exit(EXIT_FAILURE);
+    createBufferPool();
 }
 
 
@@ -107,6 +109,23 @@ JpegEncoder::createComponent() {
       fprintf(stderr, "Encoder component done\n");
 
    return status;
+}
+
+
+void
+JpegEncoder::createBufferPool() {
+    MMAL_STATUS_T status;
+    // Create pool of buffer headers for the output port to consume
+    MMAL_PORT_T *outputPort = pComponent->output[0];
+
+    qDebug() << "Encoder out Port buffer size  :" << outputPort->buffer_size;
+    qDebug() << "Encoder out Port buffer number:" << outputPort->buffer_num;
+    // Create pool of buffer headers for the output port to consume
+    pool = mmal_port_pool_create(outputPort, outputPort->buffer_num, outputPort->buffer_size);
+    if(!pool) {
+        qDebug() << QString("Failed to create buffer header pool for encoder output port %1")
+                    .arg(outputPort->name);
+    }
 }
 
 

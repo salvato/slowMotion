@@ -49,8 +49,9 @@ public:
     MMAL_STATUS_T enableCamera();
     void createBufferPool();
     void destroyComponent();
+    MMAL_STATUS_T startPreview(Preview *pPreview);
     MMAL_STATUS_T start(Preview* pPreview, JpegEncoder* pEncoder);
-    void stop();
+    void stop(JpegEncoder *pEncoder);
     void capture(QString sPathName);
 
 public:
