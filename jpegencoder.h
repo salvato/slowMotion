@@ -15,7 +15,6 @@ public:
 protected:
     MMAL_STATUS_T createComponent();
     void createBufferPool();
-    bool verbose;
 
 public:
     MMAL_COMPONENT_T *pComponent;

@@ -22,7 +22,7 @@ CONFIG += c++14
 SOURCES += main.cpp \
     utility.cpp \
     jpegencoder.cpp
-SOURCES += setupdialog.cpp
+SOURCES +=
 SOURCES += picamera.cpp
 SOURCES += maindialog.cpp
 SOURCES += preview.cpp
@@ -40,7 +40,7 @@ INCLUDEPATH += /usr/local/include
 HEADERS += maindialog.h \
     utility.h \
     jpegencoder.h
-HEADERS += setupdialog.h
+HEADERS +=
 HEADERS += picamera.h
 HEADERS += preview.h
 HEADERS +=
@@ -48,7 +48,7 @@ HEADERS += cameracontrol.h
 
 
 FORMS += maindialog.ui
-FORMS += setupdialog.ui
+FORMS +=
 
 
 LIBS+= -L$$SDKSTAGE/lib

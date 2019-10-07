@@ -2,7 +2,6 @@
 #include "maindialog.h"
 #include "ui_maindialog.h"
 #include "pigpiod_if2.h"// The library for using GPIO pins on Raspberry
-#include "setupdialog.h"
 #include <QThread>
 #include <QMoveEvent>
 #include <QMessageBox>
@@ -10,6 +9,7 @@
 #include <QSettings>
 #include <QDebug>
 #include <QDir>
+#include "utility.h"
 
 
 #define MIN_INTERVAL 1500 // in ms (depends on the image format: jpeg is HW accelerated !)
@@ -24,12 +24,16 @@
 // in the 40 pin GPIO connector.
 // ================================================
 #define LED_PIN  23 // BCM23 is Pin 16 in the 40 pin GPIO connector.
+#define PAN_PIN  14 // BCM14 is Pin  8 in the 40 pin GPIO connector.
+#define TILT_PIN 26 // BCM26 IS Pin 37 in the 40 pin GPIO connector.
 
 
 MainDialog::MainDialog(QWidget *parent)
     : QDialog(parent)
     , pUi(new Ui::MainDialog)
     , gpioLEDpin(LED_PIN)
+    , panPin(PAN_PIN)
+    , tiltPin(TILT_PIN)
     , gpioHostHandle(-1)
     , width(0)
     , height(0)
@@ -39,10 +43,12 @@ MainDialog::MainDialog(QWidget *parent)
     , gps(0)
 {
     MMAL_STATUS_T status;
+    if(verbose)
+        exit(EXIT_FAILURE);
 
     pUi->setupUi(this);
     setFixedSize(size());
-
+// Determine the Preview Window Position
     dialogPos = pos();
     videoPos  = pUi->labelVideo->pos();
     videoSize = pUi->labelVideo->size();
@@ -51,19 +57,22 @@ MainDialog::MainDialog(QWidget *parent)
 // Init GPIO handling
     if(!gpioInit())
         exit(EXIT_FAILURE);
-    pSetupDlg = new setupDialog(gpioHostHandle);
-// Restore Previous Dialog Values
-    restoreSettings();
-// Init User Interface with restored values
-    pUi->pathEdit->setText(sBaseDir);
-    pUi->nameEdit->setText(sOutFileName);
-    pUi->startButton->setEnabled(true);
-    pUi->stopButton->setDisabled(true);
-    pUi->intervalEdit->setText(QString("%1").arg(msecInterval));
-    pUi->tTimeEdit->setText(QString("%1").arg(secTotTime));
-    pUi->labelVideo->setStyleSheet(sBlackStyle);
+    // Values to be checked with the used servos
+    PWMfrequency    =   50; // in Hz
+    pulseWidthAt_90 =  600; // in us
+    pulseWidthAt90  = 2200; // in us
+    pUi->dialPan->setRange(pulseWidthAt_90, pulseWidthAt90);
+    pUi->dialTilt->setRange(pulseWidthAt_90, pulseWidthAt90);
+    cameraPanValue  = (pulseWidthAt90-pulseWidthAt_90)/2+pulseWidthAt_90;
+    cameraTiltValue = cameraPanValue;
+// Init GPIOs
+    if(!panTiltInit())
+        exit(EXIT_FAILURE);
+
+    analog_gain = 1.0;
+    digital_gain = 1.0;
 // Prepare for periodic image acquisition
-    switchLampOff();
+    switchLampOn();
     intervalTimer.stop();// Probably non needed but...does'nt hurt
     connect(&intervalTimer,
             SIGNAL(timeout()),
@@ -71,7 +80,8 @@ MainDialog::MainDialog(QWidget *parent)
             SLOT(onTimeToGetNewImage()));
 // Check for the presence of the Pi Camera
     getSensorDefaults(cameraNum, cameraName, &width, &height);
-    dumpParameters();
+    if(verbose)
+        dumpParameters();
 // Create the needed Components
     pCamera        = new PiCamera(cameraNum, sensorMode);
     pPreview       = new Preview(videoSize.width(), videoSize.height());// Setup preview window defaults
@@ -97,20 +107,32 @@ MainDialog::MainDialog(QWidget *parent)
     }
 // Vertical Flip of the image
     pCamera->pControl->set_flips(0, 1);
-    // Enable the Camera processing
-        status = pCamera->enableCamera();
-        if(status != MMAL_SUCCESS) {
-            qDebug() << "Unable to Enable Camera. error:" << status;
-            exit(EXIT_FAILURE);
-        }
+// Enable the Camera processing
+    status = pCamera->enableCamera();
+    if(status != MMAL_SUCCESS) {
+        qDebug() << "Unable to Enable Camera. error:" << status;
+        exit(EXIT_FAILURE);
+    }
+// Restore Previous Dialog Values
+    restoreSettings();
+// Init User Interface with restored values
+    pUi->pathEdit->setText(sBaseDir);
+    pUi->nameEdit->setText(sOutFileName);
+    pUi->startButton->setEnabled(true);
+    pUi->stopButton->setDisabled(true);
+    pUi->intervalEdit->setText(QString("%1").arg(msecInterval));
+    pUi->tTimeEdit->setText(QString("%1").arg(secTotTime));
+    pUi->labelVideo->setStyleSheet(sBlackStyle);
+    pUi->aGainSlider->setValue(int(analog_gain*10.0f));
+    pUi->dGainSlider->setValue(int(digital_gain*10.0f));
+    pUi->dialPan->setValue(int(cameraPanValue));
+    pUi->dialTilt->setValue(int(cameraTiltValue));
 // Enable the Camera processing
     status = pCamera->startPreview(pPreview);
     if(status != MMAL_SUCCESS) {
         qDebug() << "Unable to Start Camera Preview. error:" << status;
         exit(EXIT_FAILURE);
     }
-// Create buffer pool
-//    pCamera->createBufferPool();
     imageNum = 0;
 }
 
@@ -153,6 +175,10 @@ MainDialog::closeEvent(QCloseEvent *event) {
     settings.setValue("FileName", sOutFileName);
     settings.setValue("Interval", msecInterval);
     settings.setValue("TotalTime", secTotTime);
+    settings.setValue("AnalogGain", analog_gain);
+    settings.setValue("DigitalGain", digital_gain);
+    settings.setValue("panValue",  cameraPanValue);
+    settings.setValue("tiltValue", cameraTiltValue);
     // Free GPIO
     if(gpioHostHandle >= 0)
         pigpio_stop(gpioHostHandle);
@@ -184,9 +210,111 @@ MainDialog::restoreSettings() {
                                   QStandardPaths::writableLocation(QStandardPaths::PicturesLocation)).toString();
     sOutFileName = settings.value("FileName",
                                   QString("test")).toString();
-    msecInterval = settings.value("Interval", 10000).toInt();
-    secTotTime   = settings.value("TotalTime", 0).toInt();
+    msecInterval    = settings.value("Interval", 10000).toInt();
+    secTotTime      = settings.value("TotalTime", 0).toInt();
+    analog_gain     = settings.value("AnalogGain", 1).toFloat();
+    digital_gain    = settings.value("DigitalGain", 1).toFloat();
+    cameraPanValue  = settings.value("panValue",  cameraPanValue).toDouble();
+    cameraTiltValue = settings.value("tiltValue", cameraTiltValue).toDouble();
+}
 
+
+bool
+MainDialog::panTiltInit() {
+    int iResult;
+    // Camera Pan-Tilt Control
+    iResult = set_PWM_frequency(gpioHostHandle, panPin, PWMfrequency);
+    if(iResult < 0) {
+        QMessageBox::critical(this,
+                              QString("pigpiod Error"),
+                              QString("Non riesco a definire la frequenza del PWM per il Pan."));
+        return false;
+    }
+    if(!setPan(cameraPanValue))
+        return false;
+    if(!setTilt(cameraTiltValue))
+        return false;
+    return true;
+}
+
+
+bool
+MainDialog::setPan(double cameraPanValue) {
+    double pulseWidth = cameraPanValue;// In us
+    int iResult = set_servo_pulsewidth(gpioHostHandle, panPin, u_int32_t(pulseWidth));
+    if(iResult < 0) {
+        QString sError;
+        if(iResult == PI_BAD_USER_GPIO)
+            sError = QString("Bad User GPIO");
+        else if(iResult == PI_BAD_PULSEWIDTH)
+            sError = QString("Bad Pulse Width %1").arg(pulseWidth);
+        else if(iResult == PI_NOT_PERMITTED)
+            sError = QString("Not Permitted");
+        else
+            sError = QString("Unknown Error");
+        QMessageBox::critical(this,
+                              sError,
+                              QString("Non riesco a far partire il PWM per il Pan."));
+        return false;
+    }
+    set_PWM_frequency(gpioHostHandle, panPin, 0);
+    iResult = set_PWM_frequency(gpioHostHandle, tiltPin, 0);
+    if(iResult == PI_BAD_USER_GPIO) {
+        QMessageBox::critical(this,
+                              QString("pigpiod Error"),
+                              QString("Bad User GPIO"));
+        return false;
+    }
+    if(iResult == PI_NOT_PERMITTED) {
+        QMessageBox::critical(this,
+                              QString("pigpiod Error"),
+                              QString("GPIO operation not permitted"));
+        return false;
+    }
+    return true;
+}
+
+
+bool
+MainDialog::setTilt(double cameraTiltValue) {
+    double pulseWidth = cameraTiltValue;// In us
+    int iResult = set_PWM_frequency(gpioHostHandle, tiltPin, PWMfrequency);
+    if(iResult < 0) {
+        QMessageBox::critical(this,
+                              QString("pigpiod Error"),
+                              QString("Non riesco a definire la frequenza del PWM per il Tilt."));
+        return false;
+    }
+    iResult = set_servo_pulsewidth(gpioHostHandle, tiltPin, u_int32_t(pulseWidth));
+    if(iResult < 0) {
+        QString sError;
+        if(iResult == PI_BAD_USER_GPIO)
+            sError = QString("Bad User GPIO");
+        else if(iResult == PI_BAD_PULSEWIDTH)
+            sError = QString("Bad Pulse Width %1").arg(pulseWidth);
+        else if(iResult == PI_NOT_PERMITTED)
+            sError = QString("Not Permitted");
+        else
+            sError = QString("Unknown Error");
+        QMessageBox::critical(this,
+                              sError,
+                              QString("Non riesco a far partire il PWM per il Tilt."));
+        return false;
+    }
+    iResult = set_PWM_frequency(gpioHostHandle, tiltPin, 0);
+    if(iResult == PI_BAD_USER_GPIO) {
+        QMessageBox::critical(this,
+                              QString("pigpiod Error"),
+                              QString("Bad User GPIO"));
+        return false;
+    }
+    if(iResult == PI_NOT_PERMITTED) {
+        QMessageBox::critical(this,
+                              QString("pigpiod Error"),
+                              QString("GPIO operation not permitted"));
+        return false;
+    }
+    return true;
 }
 
 
@@ -242,17 +370,17 @@ MainDialog::setDefaultParameters() {
 //  Give a set of default values
 void
 MainDialog::initDefaults() {
-    sharpness             = 0;
-    contrast              = 0;
-    brightness            = 50;
-    saturation            = 0;
-    ISO                   = 0;// 0 = auto
-    videoStabilisation    = 0;
-    exposureCompensation  = 0;
-    exposureMode          = MMAL_PARAM_EXPOSUREMODE_AUTO;
+    sharpness             = 0;// -100 - 100 (image sharpness; 0 default)
+    contrast              = 0;// -100 - 100 (image contrast; 0 default)
+    brightness            = 50;// 0 - 100 (image brightness; 50 default)
+    saturation            = 0;// -100 - 100 (image saturation; 0 default)
+    ISO                   = 0;// 100 - 800 (0 = auto)
+    videoStabilisation    = 0;// 0=false, not 0=true
+    exposureCompensation  = 0;// -10 - 10 (exposure Compensation; 0 default)
+    exposureMode          = MMAL_PARAM_EXPOSUREMODE_FIXEDFPS;//MMAL_PARAM_EXPOSUREMODE_AUTO;//
     flickerAvoidMode      = MMAL_PARAM_FLICKERAVOID_OFF;
     exposureMeterMode     = MMAL_PARAM_EXPOSUREMETERINGMODE_AVERAGE;
-    awbMode               = MMAL_PARAM_AWBMODE_AUTO;
+    awbMode               = MMAL_PARAM_AWBMODE_AUTO;//MMAL_PARAM_AWBMODE_OFF;//
     imageEffect           = MMAL_PARAM_IMAGEFX_NONE;
     colourEffects.enable  = 0;
     colourEffects.u       = 128;
@@ -264,7 +392,7 @@ MainDialog::initDefaults() {
     roi.y                 = 0.0;
     roi.w                 = 1.0;
     roi.h                 = 1.0;
-    shutter_speed         = 0;// 0 = auto
+    shutter_speed         = 10000;// in usec (0 = auto)
     awb_gains_r           = 0;// Only have any function if AWB OFF is used.
     awb_gains_b           = 0;
     drc_level             = MMAL_PARAMETER_DRC_STRENGTH_OFF;
@@ -277,6 +405,8 @@ MainDialog::initDefaults() {
     stereo_mode.mode      = MMAL_STEREOSCOPIC_MODE_NONE;
     stereo_mode.decimate  = MMAL_FALSE;
     stereo_mode.swap_eyes = MMAL_FALSE;
+    analog_gain           = 1.0;// Analog gain [1.0 - 12.0]
+    digital_gain          = 1.0;// Digital gain [1.0 - 255.0]
     onlyLuma              = MMAL_FALSE;
 }
 
@@ -452,17 +582,15 @@ MainDialog::on_startButton_clicked() {
         pUi->statusBar->setText((QString("Error: Check Values !")));
         return;
     }
-
+    switchLampOff();
     intervalTimer.start(msecInterval);
 
-    QList<QLineEdit *> widgets = findChildren<QLineEdit *>();
+    QList<QWidget *> widgets = findChildren<QWidget *>();
     for(int i=0; i<widgets.size(); i++) {
         widgets[i]->setDisabled(true);
     }
-    pUi->setupButton->setDisabled(true);
-    pUi->startButton->setDisabled(true);
     pUi->stopButton->setEnabled(true);
-    pCamera->start(pPreview, pJpegEncoder);
+    pCamera->start(pJpegEncoder);
 }
 
 
@@ -471,19 +599,11 @@ MainDialog::on_stopButton_clicked() {
     intervalTimer.stop();
     pCamera->stop(pJpegEncoder);
     switchLampOff();
-    QList<QLineEdit *> widgets = findChildren<QLineEdit *>();
+    QList<QWidget *> widgets = findChildren<QWidget *>();
     for(int i=0; i<widgets.size(); i++) {
         widgets[i]->setEnabled(true);
     }
-    pUi->startButton->setEnabled(true);
-    pUi->setupButton->setEnabled(true);
     pUi->stopButton->setDisabled(true);
-}
-
-
-void
-MainDialog::on_setupButton_clicked() {
-    pSetupDlg->exec();
 }
 
 
@@ -562,5 +682,61 @@ MainDialog::onTimeToGetNewImage() {
     QThread::msleep(300);
     switchLampOff();
     imageNum++;
+}
+
+
+void
+MainDialog::on_aGainSlider_sliderMoved(int position) {
+    analog_gain = position/10.0f;
+    CameraControl* pCameraControl = pCamera->pControl;
+    pCameraControl->set_gains(analog_gain, digital_gain);
+    if(verbose)
+        qDebug() << __func__ << "New gains=" << analog_gain << digital_gain;
+}
+
+
+void
+MainDialog::on_aGainSlider_valueChanged(int value) {
+    analog_gain = value/10.0f;
+    CameraControl* pCameraControl = pCamera->pControl;
+    pCameraControl->set_gains(analog_gain, digital_gain);
+    if(verbose)
+        qDebug() << __func__ << "New gains=" << analog_gain << digital_gain;
+}
+
+
+void
+MainDialog::on_dGainSlider_sliderMoved(int position) {
+    digital_gain = position/10.0f;
+    CameraControl* pCameraControl = pCamera->pControl;
+    pCameraControl->set_gains(analog_gain, digital_gain);
+    if(verbose)
+        qDebug() << __func__ << "New gains=" << analog_gain << digital_gain;
+}
+
+
+void
+MainDialog::on_dGainSlider_valueChanged(int value) {
+    digital_gain = value/10.0f;
+    CameraControl* pCameraControl = pCamera->pControl;
+    pCameraControl->set_gains(analog_gain, digital_gain);
+    if(verbose)
+        qDebug() << __func__ << "New gains=" << analog_gain << digital_gain;
+}
+
+
+void
+MainDialog::on_dialPan_valueChanged(int value) {
+    cameraPanValue  = value;
+    setPan(cameraPanValue);
+    update();
+}
+
+
+void
+MainDialog::on_dialTilt_valueChanged(int value) {
+    cameraTiltValue = value;
+    setTilt(cameraTiltValue);
+    update();
 }
 

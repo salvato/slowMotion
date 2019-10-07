@@ -3,8 +3,6 @@
 #include "bcm_host.h"
 #include <QDebug>
 
-#define verbose true
-
 
 #define MY_VCOS_ALIGN_DOWN(p,n) ((reinterpret_cast<ptrdiff_t>(p)) & ~((n)-1))
 #define MY_VCOS_ALIGN_UP(p,n) MY_VCOS_ALIGN_DOWN(reinterpret_cast<ptrdiff_t>((p)+(n)-1),(n))
@@ -312,7 +310,7 @@ PiCamera::startPreview(Preview *pPreview) {
 
 
 MMAL_STATUS_T
-PiCamera::start(Preview *pPreview, JpegEncoder *pEncoder) {
+PiCamera::start(JpegEncoder *pEncoder) {
     MMAL_STATUS_T status;
     MMAL_PORT_T* cameraStillPort   = component->output[MMAL_CAMERA_CAPTURE_PORT];
     MMAL_PORT_T* encoderInputPort  = pEncoder->pComponent->input[0];
@@ -323,7 +321,7 @@ PiCamera::start(Preview *pPreview, JpegEncoder *pEncoder) {
     if(status != MMAL_SUCCESS) {
        qDebug() << QString("%1: Failed to connect camera video port to encoder input")
                    .arg(__func__);
-       handleError(status, pPreview);
+       exit(EXIT_FAILURE);
     }
     // Enable the encoder output port
     MMAL_PORT_T* encoderOutputPort = pEncoder->pComponent->output[0];
@@ -445,7 +443,8 @@ PiCamera::capture(QString sPathName) {
                     .arg(sPathName);
     }
     else {
-        qDebug() << "Writing" << sPathName;
+        if(verbose)
+           qDebug() << "Writing" << sPathName;
     }
     callbackData.file_handle = output_file;
     MMAL_PORT_T* cameraStillPort = component->output[MMAL_CAMERA_CAPTURE_PORT];

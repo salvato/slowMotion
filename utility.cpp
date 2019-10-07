@@ -131,6 +131,8 @@ checkConfiguration(int min_gpu_mem) {
         qDebug() << QString("Please check carefully the camera module is installed correctly");
         exit(EXIT_FAILURE);
     }
-    qDebug() << "N° of Camera Supported:" << supported;
-    qDebug() << "N° of Camera Detected" << detected;
+    if(verbose) {
+        qDebug() << "N° of Camera Supported:" << supported;
+        qDebug() << "N° of Camera Detected" << detected;
+    }
 }

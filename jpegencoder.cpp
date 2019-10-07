@@ -12,7 +12,7 @@ JpegEncoder::JpegEncoder()
     : pComponent(nullptr)
     , pool(nullptr)
 {
-    verbose = true;
+    quality = 100;
     restartInterval = 0;
     encoding = MMAL_ENCODING_JPEG;
     if(createComponent() != MMAL_SUCCESS)
@@ -77,7 +77,9 @@ JpegEncoder::createComponent() {
    status = mmal_port_parameter_set_uint32(encoder_output, MMAL_PARAMETER_JPEG_Q_FACTOR, quality);
 
    if(status != MMAL_SUCCESS) {
-      qDebug() << QString("Unable to set JPEG quality");
+      mmal_status_to_int(status);
+      qDebug() << QString("Unable to set JPEG quality %1")
+                  .arg(quality);
       if (pComponent)
          mmal_component_destroy(pComponent);
       return status;
@@ -116,9 +118,10 @@ void
 JpegEncoder::createBufferPool() {
     // Create pool of buffer headers for the output port to consume
     MMAL_PORT_T *outputPort = pComponent->output[0];
-
-    qDebug() << "Encoder out Port buffer size  :" << outputPort->buffer_size;
-    qDebug() << "Encoder out Port buffer number:" << outputPort->buffer_num;
+    if(verbose) {
+        qDebug() << "Encoder out Port buffer size  :" << outputPort->buffer_size;
+        qDebug() << "Encoder out Port buffer number:" << outputPort->buffer_num;
+    }
     // Create pool of buffer headers for the output port to consume
     pool = mmal_port_pool_create(outputPort, outputPort->buffer_num, outputPort->buffer_size);
     if(!pool) {

@@ -50,7 +50,7 @@ public:
     void createBufferPool();
     void destroyComponent();
     MMAL_STATUS_T startPreview(Preview *pPreview);
-    MMAL_STATUS_T start(Preview* pPreview, JpegEncoder* pEncoder);
+    MMAL_STATUS_T start(JpegEncoder* pEncoder);
     void stop(JpegEncoder *pEncoder);
     void capture(QString sPathName);
 
